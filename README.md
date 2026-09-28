@@ -15,6 +15,9 @@ los valores cargados) o **Borrar** (con confirmación). Sin fragmento muestra «
 
 Pestaña **Presupuestos**: lista las categorías de gasto con lo gastado en el mes y el presupuesto mensual por moneda
 (✅ < 80 %, ⚠️ ≥ 80 %, 🚨 ≥ 100 %). Al tocar una: elegir moneda y poner, cambiar o quitar el monto.
+Abajo, **💱 Tasas de cambio a CUP** (1 USD = X CUP, 1 UYU = Y CUP, con la fecha de actualización): al tocar una se
+cambia (hasta 4 decimales, vista previa «100 USD ≈ … CUP») o se quita. Son solo para mostrar: con tasa, el detalle de un
+movimiento en USD/UYU y la edición de un presupuesto muestran el equivalente aproximado en CUP.
 
 Pestaña **Fijos**: gastos/ingresos fijos mensuales (luz, internet, sueldo…) que el bot anota solo cada mes el día
 indicado. **➕ Agregar fijo** abre un formulario (tipo, monto, moneda, categoría, cuenta, nota ≤ 30, día 1–31); al tocar
@@ -32,10 +35,12 @@ Fuera de Telegram muestra un aviso y, al guardar, el JSON que se enviaría.
 {"v":1,"op":"fijo_add","t":"g","monto":1500,"mon":"CUP","cat":"Vivienda","cuenta":"Banco","nota":"Luz","dia":1}
 {"v":1,"op":"fijo_edit","id":"f<base36>","t":"g","monto":1700,"mon":"CUP","cat":"Vivienda","cuenta":"Banco","nota":"Luz","dia":5,"activo":false}
 {"v":1,"op":"fijo_del","id":"f<base36>"}
+{"v":1,"op":"rate","mon":"USD|UYU","tasa":400}
 ```
 - `monto`: número positivo, máx. 2 decimales. `nota`: máx. 100 caracteres (puede ser vacía). `fecha`: `hoy`/`ayer`
   (los resuelve el bot con su reloj) u otra fecha elegida.
 - En `budget`, `monto` 0 quita el presupuesto de esa categoría y moneda.
+- En `rate`, `tasa` = CUP por 1 unidad de `mon` (número ≥ 0, máx. 4 decimales); 0 quita la tasa. CUP no lleva tasa.
 - En `edit`, `"nota":null` = conservar la descripción actual (se usa cuando la nota llegó recortada y no se tocó).
 
 ## Fragmento `#m=` (lo arma el bot)
@@ -45,6 +50,7 @@ id entero = diferencia con el id numérico anterior (el primero, absoluto), text
 monIdx en `CUP, USD, UYU`; díasAntes respecto de `d` (`null` = desconocida); `1` final = nota recortada.
 Si hay presupuestos: `"b":[[catIdx,monIdx,presupuesto,gastadoEnElMesDe_d]]` (nunca se recortan).
 Si hay fijos: `"f":[[id,tipo,monto,monIdx,catIdx,cuentaIdx,día,activo(,nota)]]` (tampoco se recortan).
+Si hay tasas: `"r":[[monIdx,tasa,díasAntesDeLaActualización|null]]` (tampoco se recortan).
 Telegram añade sus parámetros al mismo fragmento (`#m=…&tgWebAppData=…`), por eso se lee solo `m=`.
 
 ## Pruebas

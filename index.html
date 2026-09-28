@@ -71,6 +71,7 @@ pre{background:var(--bg2);border-radius:10px;padding:10px;white-space:pre-wrap;w
 .item.off{opacity:.55}
 select{width:100%;font:inherit;color:var(--text);background:var(--bg2);border:0;border-radius:12px;padding:11px 12px}
 .addbtn{margin:0 0 10px}
+.sect{color:var(--hint);font-size:13px;margin:18px 0 6px;text-transform:uppercase;letter-spacing:.03em}
 .item .lv{font-size:13px;font-weight:700;white-space:nowrap}
 .item .lv.ok{color:var(--ok)}
 .item .lv.warn{color:#d18b00}
@@ -195,6 +196,22 @@ input.bigin{font-size:24px;font-weight:700;text-align:center}
   <section class="screen" id="sB">
     <p id="budNote" class="hint"></p>
     <div class="list" id="budList"></div>
+    <p class="sect">💱 Tasas de cambio a CUP</p>
+    <div class="list" id="rateList"></div>
+    <p id="rateNote" class="hint">Solo para mostrar totales en CUP; los montos guardados no cambian.</p>
+  </section>
+
+  <!-- cambiar / quitar una tasa -->
+  <section class="screen" id="sR">
+    <label class="lbl" for="rateAmt" id="rateLbl">CUP por 1 USD</label>
+    <input type="text" id="rateAmt" class="bigin" inputmode="decimal" maxlength="16" placeholder="Ej.: 400" autocomplete="off" enterkeyhint="done">
+    <p id="rateInfo" class="hint"></p>
+    <button id="rateSave" class="fbtn" type="button">Guardar tasa</button>
+    <button id="rateDel" class="fbtn danger hidden" type="button">Quitar tasa</button>
+    <div id="rateOut" class="hidden">
+      <label class="lbl">JSON que se enviaría (prueba)</label>
+      <pre id="rateJson"></pre>
+    </div>
   </section>
 
   <!-- poner / cambiar / quitar un presupuesto -->
@@ -280,7 +297,8 @@ input.bigin{font-size:24px;font-weight:700;text-align:center}
   var CUENTAS = ['Efectivo', 'Banco', 'PayPal'];
   var TITLES = ['', 'Nuevo movimiento', 'Categoría', 'Detalles', 'Confirmar'];
   var MAX_INT_DIGITS = 9;
-  var SCREENS = ['s1', 's2', 's3', 's4', 'sL', 'sD', 'sB', 'sBE', 'sF', 'sFE'];
+  var SCREENS = ['s1', 's2', 's3', 's4', 'sL', 'sD', 'sB', 'sBE', 'sF', 'sFE', 'sR'];
+  var RATE_CURS = ['USD', 'UYU']; // Rates::CURRENCIES del bot
   var FX_NOTE_MAX = 30; // FixedEntries::NOTE_MAX del bot
   var MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
 
@@ -293,7 +311,7 @@ input.bigin{font-size:24px;font-weight:700;text-align:center}
 
   function fresh() {
     return { view: 'flow', step: 1, t: 'g', amt: '', mon: 'CUP', cat: null, cuenta: 'Efectivo', fechaMode: 'hoy', fechaOtra: '', nota: '',
-      editId: null, notaOrig: '', cut: false, sel: -1, budCat: null, budMon: 'CUP', fx: null };
+      editId: null, notaOrig: '', cut: false, sel: -1, budCat: null, budMon: 'CUP', fx: null, rateMon: null };
   }
   var st = fresh();
 
@@ -345,7 +363,8 @@ input.bigin{font-size:24px;font-weight:700;text-align:center}
   // ---- movimientos recientes: fragmento #m=<base64url de JSON> que pone el bot en la URL del botón ----
   // {"v":1,"t":unix,"d":"YYYY-MM-DD","c":[cats],"a":[cuentas],"m":[[id,tipo,monto,monIdx,catIdx,cuentaIdx,díasAntes(,nota(,1))]],
   //  "b":[[catIdx,monIdx,presupuesto,gastadoDelMes]],  ("b" solo si hay presupuestos)
-  //  "f":[[id,tipo,monto,monIdx,catIdx,cuentaIdx,día,activo(,nota)]]}  ("f" solo si hay fijos)
+  //  "f":[[id,tipo,monto,monIdx,catIdx,cuentaIdx,día,activo(,nota)]],  ("f" solo si hay fijos)
+  //  "r":[[monIdx,tasa,díasAntes|null]]}  (tasas a CUP, "r" solo si hay)
   // Telegram añade sus parámetros al mismo fragmento (#m=...&tgWebAppData=...), por eso se busca "m=".
   function b64urlDecode(s) {
     s = s.replace(/-/g, '+').replace(/_/g, '/');
@@ -391,7 +410,14 @@ input.bigin{font-size:24px;font-weight:700;text-align:center}
         fixed.push({ id: r[0], t: r[1] === 1 ? 'i' : 'g', monto: r[2], mon: mon, cat: cat, cuenta: cuenta, dia: dia, activo: r[7] !== 0,
           nota: typeof r[8] === 'string' ? r[8] : '' });
       });
-      return { at: typeof d.t === 'number' ? d.t : 0, d: d.d, items: items, budgets: budgets, fixed: fixed };
+      var rates = {};
+      (Array.isArray(d.r) ? d.r : []).forEach(function (r) {
+        if (!Array.isArray(r) || r.length < 3) return;
+        var mon = CURRENCIES[r[0]];
+        if (RATE_CURS.indexOf(mon) < 0 || typeof r[1] !== 'number' || !(r[1] > 0)) return;
+        rates[mon] = { tasa: r[1], fecha: typeof r[2] === 'number' ? daysBefore(d.d, r[2]) : '' };
+      });
+      return { at: typeof d.t === 'number' ? d.t : 0, d: d.d, items: items, budgets: budgets, fixed: fixed, rates: rates };
     } catch (e) { return null; }
   }
   var recent = readRecent();
@@ -536,6 +562,7 @@ input.bigin{font-size:24px;font-weight:700;text-align:center}
       ['Cuenta', it.cuenta],
       ['Fecha', it.fecha ? fmtFecha(it.fecha) : '¿?']
     ];
+    if (inCup(it.monto, it.mon)) rows.splice(2, 0, ['En CUP', inCup(it.monto, it.mon)]);
     if (it.nota) rows.push(['Nota', it.nota + (it.cut ? '…' : '')]);
     rowsInto($('detSum'), rows, 1);
     $('delConfirm').classList.add('hidden');
@@ -551,7 +578,7 @@ input.bigin{font-size:24px;font-weight:700;text-align:center}
     if (st.step === 3) return { text: 'Siguiente', visible: true, active: true };
     return { text: st.editId ? 'Guardar cambios' : 'Guardar', visible: true, active: true };
   }
-  function canGoBack() { return st.view === 'detail' || st.view === 'budgetEdit' || st.view === 'fixedEdit' || (st.view === 'flow' && (st.step > 1 || !!st.editId)); }
+  function canGoBack() { return st.view === 'detail' || st.view === 'budgetEdit' || st.view === 'fixedEdit' || st.view === 'rateEdit' || (st.view === 'flow' && (st.step > 1 || !!st.editId)); }
   function syncButtons() {
     var ms = mainState();
     if (inTg) {
@@ -649,6 +676,7 @@ input.bigin{font-size:24px;font-weight:700;text-align:center}
       b.appendChild(e); b.appendChild(t); b.appendChild(lv);
       el.appendChild(b);
     });
+    renderRates();
   }
   function showBudgets() {
     if (st.editId) { st = fresh(); st.mon = defaultMon; renderSegs(); }
@@ -666,7 +694,8 @@ input.bigin{font-size:24px;font-weight:700;text-align:center}
     var info = $('budInfo');
     info.classList.remove('err');
     if (!recent) info.textContent = 'Sin datos del mes (manda /app para verlos).';
-    else if (b) info.textContent = 'Gastado este mes: ' + fmtMonto(b.gastado) + ' ' + b.mon + ' de ' + fmtMonto(b.monto) + ' (' + pct(b) + '%).';
+    else if (b) info.textContent = 'Gastado este mes: ' + fmtMonto(b.gastado) + ' ' + b.mon + ' de ' + fmtMonto(b.monto) + ' (' + pct(b) + '%).'
+      + (inCup(b.monto, b.mon) ? ' Presupuesto ' + inCup(b.monto, b.mon) + '.' : '');
     else info.textContent = 'Sin presupuesto en ' + st.budMon + '.';
     $('budOut').classList.add('hidden');
   }
@@ -695,6 +724,71 @@ input.bigin{font-size:24px;font-weight:700;text-align:center}
       return;
     }
     send({ v: 1, op: 'budget', cat: st.budCat, mon: st.budMon, monto: n }, 'budOut', 'budJson');
+  }
+
+  // ---- tasas a CUP (solo para mostrar) ----
+  function rateOf(mon) { return recent && recent.rates[mon] ? recent.rates[mon] : null; }
+  function fmtRate(n) { return n.toFixed(4).replace(/0+$/, '').replace(/\.$/, '').replace('.', ',').replace(/^(\d+)/, function (x) { return x.replace(/\B(?=(\d{3})+(?!\d))/g, '.'); }); }
+  // equivalente en CUP de un monto en otra moneda ('' si no hay tasa o ya es CUP)
+  function inCup(monto, mon) {
+    var r = mon === 'CUP' ? null : rateOf(mon);
+    return r ? '≈ ' + fmtMonto(Math.round(monto * r.tasa * 100) / 100) + ' CUP' : '';
+  }
+  function rateWhen(f) { var d = shortDate(f); return 'Actualizada ' + (/^\d/.test(d) ? 'el ' + d : d.toLowerCase()); }
+  function renderRates() {
+    var el = $('rateList');
+    el.textContent = '';
+    RATE_CURS.forEach(function (mon) {
+      var r = rateOf(mon);
+      var b = document.createElement('button');
+      b.type = 'button'; b.className = 'item'; b.setAttribute('data-rate', mon);
+      var e = document.createElement('span'); e.className = 'ie'; e.textContent = '💱';
+      var t = document.createElement('span'); t.className = 'it';
+      var tb = document.createElement('b'); tb.textContent = r ? '1 ' + mon + ' = ' + fmtRate(r.tasa) + ' CUP' : '1 ' + mon + ' = sin tasa';
+      var ts = document.createElement('small'); ts.textContent = r ? (r.fecha ? rateWhen(r.fecha) : 'Sin fecha') : (recent ? 'Toca para ponerla' : 'Manda /app para ver la actual');
+      t.appendChild(tb); t.appendChild(ts);
+      var lv = document.createElement('span'); lv.className = 'lv ' + (r ? 'ok' : 'none'); lv.textContent = r ? '✏️' : '＋';
+      b.appendChild(e); b.appendChild(t); b.appendChild(lv);
+      el.appendChild(b);
+    });
+  }
+  function parseRate(s) {
+    s = String(s || '').replace(/\s+/g, '');
+    if (/^\d{1,3}(\.\d{3})+(,\d{1,4})?$/.test(s)) s = s.replace(/\./g, '').replace(',', '.');
+    else if (/^\d+([.,]\d{1,4})?$/.test(s)) s = s.replace(',', '.');
+    else return NaN;
+    var n = Number(s);
+    return isFinite(n) && n < 1e6 ? Math.round(n * 10000) / 10000 : NaN;
+  }
+  function renderRateInfo() {
+    var info = $('rateInfo'), n = parseRate($('rateAmt').value), r = rateOf(st.rateMon);
+    info.classList.remove('err');
+    var parts = [];
+    if (n > 0) parts.push('100 ' + st.rateMon + ' ≈ ' + fmtMonto(Math.round(100 * n * 100) / 100) + ' CUP.');
+    if (r) parts.push('Actual: ' + fmtRate(r.tasa) + (r.fecha ? ' (' + shortDate(r.fecha) + ')' : '') + '.');
+    else if (!recent) parts.push('Sin datos (manda /app para ver la tasa actual).');
+    info.textContent = parts.join(' ');
+  }
+  function showRateEdit(mon) {
+    st.view = 'rateEdit';
+    st.rateMon = mon;
+    var r = rateOf(mon);
+    $('rateLbl').textContent = 'CUP por 1 ' + mon;
+    $('rateAmt').value = r ? fmtRate(r.tasa) : '';
+    $('rateDel').classList.toggle('hidden', !r);
+    $('rateSave').textContent = r ? 'Cambiar tasa' : 'Poner tasa';
+    $('rateOut').classList.add('hidden');
+    renderRateInfo();
+    showScreen('sR', 'Tasa ' + mon, '');
+  }
+  function saveRate(remove) {
+    var n = remove ? 0 : parseRate($('rateAmt').value);
+    if (!remove && !(n > 0)) {
+      haptic('not', 'error');
+      var info = $('rateInfo'); info.textContent = 'Escribe cuántos CUP vale 1 ' + st.rateMon + ' (ej.: 400 o 9,5; hasta 4 decimales).'; info.classList.add('err');
+      return;
+    }
+    send({ v: 1, op: 'rate', mon: st.rateMon, tasa: n }, 'rateOut', 'rateJson');
   }
 
   // ---- fijos ----
@@ -841,6 +935,7 @@ input.bigin{font-size:24px;font-weight:700;text-align:center}
     if (st.view === 'detail') { haptic('sel'); showList(); }
     else if (st.view === 'budgetEdit') { haptic('sel'); showBudgets(); }
     else if (st.view === 'fixedEdit') { haptic('sel'); showFixed(); }
+    else if (st.view === 'rateEdit') { haptic('sel'); showBudgets(); }
     else if (st.view === 'flow' && st.step > 1) { haptic('sel'); go(st.step - 1); }
     else if (st.view === 'flow' && st.editId) { haptic('sel'); var i = st.sel; st = fresh(); st.mon = defaultMon; renderSegs(); showDetail(i); }
   }
@@ -881,6 +976,15 @@ input.bigin{font-size:24px;font-weight:700;text-align:center}
     var v = b.getAttribute('data-view');
     if (v === 'list') showList(); else if (v === 'budgets') showBudgets(); else if (v === 'fixed') showFixed(); else newEntry();
   });
+  $('rateList').addEventListener('click', function (e) {
+    var b = e.target.closest('button[data-rate]'); if (!b) return;
+    haptic('sel');
+    showRateEdit(b.getAttribute('data-rate'));
+  });
+  $('rateAmt').addEventListener('input', renderRateInfo);
+  $('rateAmt').addEventListener('keydown', function (e) { if (e.key === 'Enter') this.blur(); });
+  $('rateSave').addEventListener('click', function () { saveRate(false); });
+  $('rateDel').addEventListener('click', function () { haptic('imp', 'medium'); saveRate(true); });
   $('fxNew').addEventListener('click', function () { haptic('sel'); showFixedEdit(null); });
   $('fxList').addEventListener('click', function (e) {
     var b = e.target.closest('button[data-fx]'); if (!b) return;

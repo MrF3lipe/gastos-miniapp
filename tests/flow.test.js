@@ -592,6 +592,85 @@ async function shot(page, name) { if (SHOTS) await page.screenshot({ path: path.
       await ctx.close();
     }
 
+    // 21) Tasas desde el fragmento: sección en Presupuestos, equivalente en CUP en presupuesto y detalle
+    {
+      const f = fixture(hoy);
+      f.b = [[0, 1, 100, 12.5]];
+      f.r = [[1, 410.5, 0], [2, 9.5, 8], [0, 1, 0], [1, -3, 0]];                 // CUP y tasa negativa se ignoran
+      const { ctx, page, errors } = await newPage(browser, base, fragment(f), true);
+      await page.click('#tabBud');
+      const p8 = ymdInTz(-8).split('-');
+      const rows = await page.$$eval('#rateList .item', (b) => b.map((x) => x.getAttribute('data-rate') + '|' + x.querySelector('b').textContent + '|' + x.querySelector('small').textContent));
+      assert.deepStrictEqual(rows, ['USD|1 USD = 410,5 CUP|Actualizada hoy', 'UYU|1 UYU = 9,5 CUP|Actualizada el ' + p8[2] + '/' + p8[1] + '/' + p8[0].slice(2)]);
+      if (SHOTS) await page.locator('#rateList').screenshot({ path: path.join(SHOTS, '21-tasas.png') });
+      await page.click('#budList .item[data-cat="Comida"]');
+      assert.strictEqual(await page.textContent('#budInfo'), 'Gastado este mes: 12,50 USD de 100 (12%). Presupuesto ≈ 41.050 CUP.');
+      await page.evaluate(() => window.__tg.back.cb());
+      await page.click('#tabList');
+      await page.click('#list .item[data-id="104000"]');                          // 12,50 USD
+      const det = await page.$$eval('#detSum .row', (r) => r.map((x) => x.textContent));
+      assert.deepStrictEqual(det.slice(1, 3), ['Monto12,50 USD', 'En CUP≈ 5.131,25 CUP']);
+      await page.evaluate(() => window.__tg.back.cb()); await page.click('#list .item[data-id="103990"]');   // CUP: sin fila extra
+      assert.ok(!(await page.textContent('#detSum')).includes('En CUP'));
+      assert.deepStrictEqual(errors, []);
+      ok('tasas del fragmento -> 2 tasas, equivalente en CUP en presupuesto y detalle');
+
+      // 22) cambiar la tasa de USD (por sendData), con vista previa y validación
+      await page.evaluate(() => window.__tg.back.cb()); await page.click('#tabBud');
+      await page.click('#rateList .item[data-rate="USD"]');
+      assert.strictEqual(await page.textContent('#title'), 'Tasa USD');
+      assert.strictEqual(await page.inputValue('#rateAmt'), '410,5');
+      assert.strictEqual(await page.textContent('#rateInfo'), '100 USD ≈ 41.050 CUP. Actual: 410,5 (Hoy).');
+      assert.ok(await page.isVisible('#rateDel'));
+      await page.fill('#rateAmt', '4,12345');
+      await page.click('#rateSave');
+      assert.ok((await page.textContent('#rateInfo')).includes('hasta 4 decimales'));
+      assert.deepStrictEqual((await tg(page)).sent, []);
+      await page.fill('#rateAmt', '1.250,1234');
+      assert.ok((await page.textContent('#rateInfo')).startsWith('100 USD ≈ 125.012,34 CUP.'));
+      await shot(page, '22-tasa-editar.png');
+      await page.click('#rateSave');
+      assert.deepStrictEqual((await tg(page)).sent.map((x) => JSON.parse(x)), [{ v: 1, op: 'rate', mon: 'USD', tasa: 1250.1234 }]);
+      ok('cambiar tasa -> {"v":1,"op":"rate","mon":"USD","tasa":1250.1234}');
+      await ctx.close();
+    }
+
+    // 23) sin fragmento: tasas «sin tasa», poner y quitar (JSON en pantalla)
+    {
+      const { ctx, page, errors } = await newPage(browser, base, '', false);
+      await page.click('#tabBud');
+      const rows = await page.$$eval('#rateList .item', (b) => b.map((x) => x.querySelector('b').textContent + '|' + x.querySelector('small').textContent));
+      assert.deepStrictEqual(rows, ['1 USD = sin tasa|Manda /app para ver la actual', '1 UYU = sin tasa|Manda /app para ver la actual']);
+      await page.click('#rateList .item[data-rate="UYU"]');
+      assert.ok(await page.isHidden('#rateDel'));
+      assert.strictEqual(await page.textContent('#rateSave'), 'Poner tasa');
+      await page.fill('#rateAmt', '9,5');
+      await page.click('#rateSave');
+      assert.strictEqual(await page.textContent('#rateJson'), '{"v":1,"op":"rate","mon":"UYU","tasa":9.5}');
+      await page.click('#back');
+      assert.ok(await page.isVisible('#sB'));
+      assert.deepStrictEqual(errors, []);
+      ok('poner tasa sin fragmento -> {"v":1,"op":"rate","mon":"UYU","tasa":9.5}');
+      await ctx.close();
+    }
+
+    // 24) quitar tasa + fragmento generado por el bot (PHP)
+    {
+      const botUrl = 'https://mrf3lipe.github.io/gastos-miniapp/?v=6#m=eyJ2IjoxLCJ0IjoxNzkwNjE2MzAwLCJkIjoiMjAyNi0wOS0yOCIsImMiOlsiQ29taWRhIl0sImEiOlsiRWZlY3Rpdm8iXSwibSI6W1s1MDEsMCwxNS41LDEsMCwwLDAsImFsbXVlcnpvIl1dLCJiIjpbWzAsMSwxMDAsMTUuNV1dLCJyIjpbWzEsNDEwLjUsMV0sWzIsOS41LDhdXX0'; // php: WebAppData::url(...) con 1 movimiento USD, 1 presupuesto USD y 2 tasas
+      const { ctx, page, errors } = await newPage(browser, base, botUrl.slice(botUrl.indexOf('#')), false);
+      await page.click('#tabBud');
+      const rows = await page.$$eval('#rateList .item b', (b) => b.map((x) => x.textContent));
+      assert.deepStrictEqual(rows, ['1 USD = 410,5 CUP', '1 UYU = 9,5 CUP']);
+      await page.click('#rateList .item[data-rate="UYU"]');
+      await page.click('#rateDel');
+      assert.strictEqual(await page.textContent('#rateJson'), '{"v":1,"op":"rate","mon":"UYU","tasa":0}');
+      await page.click('#back'); await page.click('#tabList'); await page.click('#list .item');
+      assert.ok((await page.textContent('#detSum')).includes('≈ 6.362,75 CUP'));    // 15,50 USD x 410,5
+      assert.deepStrictEqual(errors, []);
+      ok('tasas del bot -> 2 tasas; quitar -> tasa 0');
+      await ctx.close();
+    }
+
     console.log(`\n${passed} pruebas OK`);
   } catch (e) {
     console.error('FALLO:', e); process.exitCode = 1;
