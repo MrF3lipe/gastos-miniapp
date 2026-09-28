@@ -62,6 +62,22 @@ async function newPage(browser, base, query, withStub) {
   return { ctx, page, errors };
 }
 
+// Fragmento #m= como lo arma el bot (WebAppData::fragment): ids por diferencia, tipo 0/1, índices de
+// moneda/categoría/cuenta, días antes de "d", nota opcional y 1 = nota recortada.
+function fragment(obj) { return '#m=' + Buffer.from(JSON.stringify(obj), 'utf8').toString('base64url'); }
+function fixture(hoy) {
+  return {
+    v: 1, t: 1790616300, d: hoy,
+    c: ['Comida', 'Transporte', 'Otros'], a: ['Banco', 'Efectivo', 'Tarjeta Visa'],
+    m: [
+      [104000, 0, 12.5, 1, 0, 0, 1, 'almuerzo con Ana'],       // 104000 · gasto · USD · Comida · Banco · ayer
+      [-3, 1, 200, 2, 2, 1, 0],                                // 103997 · ingreso · UYU · Otros · Efectivo · hoy · sin nota
+      ['wa-77', 0, 3, 0, 1, 2, 10, 'ñandú en el zoo', 1],      // id literal · cuenta propia · hace 10 días · nota recortada
+      [-7, 0, 1500.5, 0, 2, 1, null]                           // 103990 · fecha desconocida
+    ]
+  };
+}
+
 const tg = (page) => page.evaluate(() => JSON.parse(JSON.stringify(window.__tg)));
 const mainClick = (page) => page.evaluate(() => window.__tg.main.cb());
 const keys = async (page, seq) => { for (const k of seq) await page.click(`#pad button[data-k="${k}"]`); };
@@ -186,6 +202,168 @@ async function shot(page, name) { if (SHOTS) await page.screenshot({ path: path.
       ok('abierta desde el menú -> aviso, sin envío');
       await ctx.close();
     }
+    // 6) Lista desde el fragmento (con los parámetros que Telegram añade al mismo fragmento)
+    {
+      const q = fragment(fixture(hoy)) + '&tgWebAppData=&tgWebAppVersion=7.0&tgWebAppPlatform=android';
+      const { ctx, page, errors } = await newPage(browser, base, q, true);
+      assert.ok(await page.isVisible('#s1'));                         // arranca en «Nuevo»
+      assert.strictEqual(await page.textContent('#tabList'), '📋 Movimientos (4)');
+      await page.click('#tabs button[data-view="list"]');
+      assert.ok(await page.isVisible('#sL'));
+      assert.ok(await page.isHidden('#listEmpty'));
+      const items = await page.$$eval('#list .item', (b) => b.map((x) => [x.getAttribute('data-id'), x.querySelector('b').textContent, x.querySelector('small').textContent, x.querySelector('.ia').textContent]));
+      assert.deepStrictEqual(items, [
+        ['104000', 'almuerzo con Ana', 'Ayer · Comida · Banco', '−12,50 USD'],
+        ['103997', 'Otros', 'Hoy · Otros · Efectivo', '+200 UYU'],
+        ['wa-77', 'ñandú en el zoo…', ymdInTz(-10).split('-').reverse().join('/').replace(/\/(\d\d)(\d\d)$/, '/$2') + ' · Transporte · Tarjeta Visa', '−3 CUP'],
+        ['103990', 'Otros', '¿fecha? · Otros · Efectivo', '−1.500,50 CUP']
+      ]);
+      assert.ok((await page.textContent('#listAt')).startsWith('Lista del '));
+      let s = await tg(page); assert.strictEqual(s.main.visible, false); assert.strictEqual(s.back.visible, false);
+      await shot(page, '7-movimientos.png');
+      await page.click('#list .item[data-id="104000"]');
+      assert.ok(await page.isVisible('#sD'));
+      assert.ok((await page.textContent('#detSum')).includes('12,50 USD'));
+      s = await tg(page); assert.strictEqual(s.back.visible, true);
+      await shot(page, '8-detalle.png');
+      await page.evaluate(() => window.__tg.back.cb());
+      assert.ok(await page.isVisible('#sL'));
+      assert.deepStrictEqual(errors, []);
+      ok('lista desde el fragmento -> ' + items.length + ' movimientos');
+      await ctx.close();
+    }
+
+    // 7) Editar: carga los valores, cambia monto y nota -> op "edit" con el id
+    {
+      const { ctx, page, errors } = await newPage(browser, base, fragment(fixture(hoy)), true);
+      await page.click('#tabs button[data-view="list"]');
+      await page.click('#list .item[data-id="104000"]');
+      await page.click('#editBtn');
+      assert.ok(await page.isVisible('#s1'));
+      assert.ok(await page.isHidden('#tabs'));
+      assert.strictEqual(await page.textContent('#title'), 'Editar movimiento');
+      assert.strictEqual(await page.textContent('#amtNum'), '12,5');
+      assert.strictEqual(await page.textContent('#amtCur'), 'USD');
+      // atrás desde el paso 1 de la edición vuelve al detalle sin enviar nada
+      await page.evaluate(() => window.__tg.back.cb());
+      assert.ok(await page.isVisible('#sD'));
+      await page.click('#editBtn');
+      await keys(page, ['del', 'del', 'del', 'del', '2', '0']);
+      assert.strictEqual(await page.textContent('#amtNum'), '20');
+      await mainClick(page);                                            // categoría ya elegida
+      assert.strictEqual(await page.getAttribute('#cats button.on', 'data-cat'), 'Comida');
+      await mainClick(page);
+      assert.strictEqual(await page.getAttribute('#cuentas button.on', 'data-cuenta'), 'Banco');
+      assert.strictEqual(await page.getAttribute('#fechas button.on', 'data-f'), 'ayer');
+      assert.strictEqual(await page.inputValue('#nota'), 'almuerzo con Ana');
+      await page.fill('#nota', 'almuerzo con Ana y Pedro');
+      await shot(page, '9-editar-detalles.png');
+      await mainClick(page);
+      let s = await tg(page); assert.strictEqual(s.main.text, 'Guardar cambios');
+      assert.ok((await page.textContent('#sum')).includes('20 USD'));
+      await mainClick(page);
+      s = await tg(page);
+      assert.deepStrictEqual(s.sent, ['{"v":1,"op":"edit","id":"104000","t":"g","monto":20,"mon":"USD","cat":"Comida","cuenta":"Banco","fecha":"ayer","nota":"almuerzo con Ana y Pedro"}']);
+      assert.deepStrictEqual(errors, []);
+      ok('editar -> ' + s.sent[0]);
+      await ctx.close();
+    }
+
+    // 8) Editar sin tocar la nota recortada (nota:null), cuenta propia y fecha «otra»; ingreso sin nota
+    {
+      const { ctx, page, errors } = await newPage(browser, base, fragment(fixture(hoy)), true);
+      await page.click('#tabs button[data-view="list"]');
+      await page.click('#list .item[data-id="wa-77"]');
+      await page.click('#editBtn');
+      await mainClick(page); await mainClick(page);
+      assert.strictEqual(await page.getAttribute('#cuentas button.on', 'data-cuenta'), 'Tarjeta Visa');
+      assert.strictEqual(await page.getAttribute('#fechas button.on', 'data-f'), 'otra');
+      assert.strictEqual(await page.inputValue('#fechaInput'), ymdInTz(-10));
+      assert.ok(await page.isVisible('#notaCut'));
+      await mainClick(page);
+      assert.ok((await page.textContent('#sum')).includes('ñandú en el zoo… (se conserva)'));
+      await mainClick(page);
+      let s = await tg(page);
+      assert.deepStrictEqual(JSON.parse(s.sent[0]), { v: 1, op: 'edit', id: 'wa-77', t: 'g', monto: 3, mon: 'CUP', cat: 'Transporte', cuenta: 'Tarjeta Visa', fecha: ymdInTz(-10), nota: null });
+      ok('editar nota recortada -> ' + s.sent[0]);
+      await ctx.close();
+
+      const p2 = await newPage(browser, base, fragment(fixture(hoy)), true);
+      await p2.page.click('#tabs button[data-view="list"]');
+      await p2.page.click('#list .item[data-id="103997"]');
+      await p2.page.click('#editBtn');
+      await mainClick(p2.page); await mainClick(p2.page);
+      await p2.page.click('#fechas button[data-f="ayer"]');
+      await mainClick(p2.page); await mainClick(p2.page);
+      s = await tg(p2.page);
+      assert.deepStrictEqual(s.sent, ['{"v":1,"op":"edit","id":"103997","t":"i","monto":200,"mon":"UYU","cat":"Otros","cuenta":"Efectivo","fecha":"ayer","nota":""}']);
+      assert.deepStrictEqual(errors.concat(p2.errors), []);
+      ok('editar ingreso -> ' + s.sent[0]);
+      await p2.ctx.close();
+    }
+
+    // 9) Borrar con confirmación -> op "del"
+    {
+      const { ctx, page, errors } = await newPage(browser, base, fragment(fixture(hoy)), true);
+      await page.click('#tabs button[data-view="list"]');
+      await page.click('#list .item[data-id="103990"]');
+      await page.click('#delBtn');
+      assert.ok(await page.isVisible('#delConfirm'));
+      assert.ok(await page.isHidden('#editBtn'));
+      await shot(page, '10-borrar-confirmar.png');
+      await page.click('#delNo');                                       // cancelar no envía nada
+      assert.ok(await page.isHidden('#delConfirm'));
+      assert.deepStrictEqual((await tg(page)).sent, []);
+      await page.click('#delBtn');
+      await page.click('#delYes');
+      const s = await tg(page);
+      assert.deepStrictEqual(s.sent, ['{"v":1,"op":"del","id":"103990"}']);
+      assert.deepStrictEqual(errors, []);
+      ok('borrar -> ' + s.sent[0]);
+      await ctx.close();
+
+      // fuera de Telegram: muestra el JSON del borrado
+      const p2 = await newPage(browser, base, fragment(fixture(hoy)), false);
+      await p2.page.click('#tabs button[data-view="list"]');
+      await p2.page.click('#list .item[data-id="wa-77"]');
+      await p2.page.click('#delBtn'); await p2.page.click('#delYes');
+      assert.strictEqual(await p2.page.textContent('#delJson'), '{"v":1,"op":"del","id":"wa-77"}');
+      await p2.ctx.close();
+    }
+
+    // 10) Sin fragmento / fragmento roto: aviso «Manda /app»; lista vacía: aviso propio
+    {
+      for (const q of ['', '#m=esto-no-es-json', '#tgWebAppData=&tgWebAppPlatform=android']) {
+        const { ctx, page, errors } = await newPage(browser, base, q, true);
+        assert.strictEqual(await page.textContent('#tabList'), '📋 Movimientos');
+        await page.click('#tabs button[data-view="list"]');
+        assert.strictEqual(await page.textContent('#listEmpty'), 'Manda /app para cargar tus movimientos.');
+        assert.strictEqual(await page.$$eval('#list .item', (b) => b.length), 0);
+        await page.click('#tabs button[data-view="new"]');               // volver a «Nuevo» sigue funcionando
+        assert.ok(await page.isVisible('#s1'));
+        assert.deepStrictEqual(errors, []);
+        if (!q) await shot(page, '11-sin-fragmento.png');
+        await ctx.close();
+      }
+      const { ctx, page } = await newPage(browser, base, fragment({ v: 1, t: 1, d: hoy, c: [], a: [], m: [] }), true);
+      await page.click('#tabs button[data-view="list"]');
+      assert.ok((await page.textContent('#listEmpty')).startsWith('Todavía no hay movimientos'));
+      await ctx.close();
+      ok('sin fragmento -> «Manda /app para cargar tus movimientos.»');
+    }
+
+    // 11) Fragmento generado por el bot (PHP, WebAppData::url) se decodifica igual
+    {
+      const botUrl = 'https://mrf3lipe.github.io/gastos-miniapp/?v=3#m=eyJ2IjoxLCJ0IjoxNzkwNjE3NTAwLCJkIjoiMjAyNi0wOS0yOCIsImMiOlsiT3Ryb3MiLCJDb21pZGEiXSwiYSI6WyJFZmVjdGl2byIsIkJhbmNvIl0sIm0iOltbMTIwNSwxLDIwMC43NSwyLDAsMCwwLCJWZW50YSJdLFstMSwwLDE1MDAuNSwwLDEsMCwxXSxbIndhLTc3IiwwLDMsMCwwLDAsOF0sWy0xNCwwLDEyLDEsMSwxLDI2OSwiQWxtdWVyem8gQ29uIEFuYSBZIFBlZHJvIEVuIEVsIENlbnRybyBEZSIsMV0sWzExMCwwLDUsMCwwLDAsbnVsbCwibm90YSDDsWFuZMO6Il1dfQ'; // salida de php: WebAppData::url(...) con los datos de WebAppDataTest::testFragmentFormat
+      const { ctx, page, errors } = await newPage(browser, base, botUrl.slice(botUrl.indexOf('#')), true);
+      await page.click('#tabs button[data-view="list"]');
+      const ids = await page.$$eval('#list .item', (b) => b.map((x) => x.getAttribute('data-id') + '|' + x.querySelector('b').textContent + '|' + x.querySelector('.ia').textContent));
+      assert.deepStrictEqual(ids, ['1205|Venta|+200,75 UYU', '1204|Comida|−1.500,50 CUP', 'wa-77|Otros|−3 CUP', '1190|Almuerzo Con Ana Y Pedro En El Centro De…|−12 USD', '1300|nota ñandú|−5 CUP']);
+      assert.deepStrictEqual(errors, []);
+      ok('fragmento del bot -> ' + ids.length + ' movimientos');
+      await ctx.close();
+    }
+
     console.log(`\n${passed} pruebas OK`);
   } catch (e) {
     console.error('FALLO:', e); process.exitCode = 1;

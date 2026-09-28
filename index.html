@@ -64,6 +64,26 @@ input[type=date]{margin-top:8px}
 .fbtn{display:block;width:100%;border:0;border-radius:12px;background:var(--btn);color:var(--btn-text);font-size:16px;font-weight:600;padding:14px;margin-top:14px;cursor:pointer}
 .fbtn:disabled{opacity:.45}
 pre{background:var(--bg2);border-radius:10px;padding:10px;white-space:pre-wrap;word-break:break-all;font-size:13px;user-select:text;-webkit-user-select:text}
+.tabs{margin-bottom:8px}
+.tabs button{font-size:15px}
+.list{display:flex;flex-direction:column;gap:6px}
+.item{display:flex;align-items:center;gap:10px;width:100%;border:0;background:var(--bg2);color:var(--text);border-radius:12px;padding:10px 12px;text-align:left;cursor:pointer;font:inherit}
+.item:active{opacity:.6}
+.item .ie{font-size:20px}
+.item .it{flex:1;min-width:0;display:flex;flex-direction:column}
+.item .it b{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.item .it small{color:var(--hint);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.item .ia{font-weight:700;white-space:nowrap}
+.item .ia.g{color:var(--danger)}
+.item .ia.i{color:var(--ok)}
+.empty{color:var(--hint);text-align:center;margin:40px 12px;font-size:16px}
+.hint{color:var(--hint);font-size:12px;text-align:center;margin:10px 0 0}
+.fbtn.danger{background:var(--danger)}
+.fbtn.ghost{background:var(--bg2);color:var(--text)}
+.confirm{background:var(--bg2);border-radius:14px;padding:12px;margin-top:14px}
+.confirm p{margin:0 0 4px;font-weight:600;text-align:center}
+.two{display:flex;gap:8px}
+.two .fbtn{margin-top:10px}
 .hidden{display:none!important}
 </style>
 </head>
@@ -71,6 +91,10 @@ pre{background:var(--bg2);border-radius:10px;padding:10px;white-space:pre-wrap;w
 <div id="app">
   <div id="notice" class="notice hidden">Abierta fuera de Telegram: modo de prueba. Al guardar se muestra el JSON que se enviaría al bot.</div>
   <p id="bal" class="hidden"></p>
+  <div class="seg tabs" id="tabs">
+    <button type="button" data-view="new" class="on">➕ Nuevo</button>
+    <button type="button" data-view="list" id="tabList">📋 Movimientos</button>
+  </div>
   <div class="top">
     <button id="back" class="back hidden" type="button">‹ Atrás</button>
     <h2 id="title">Nuevo movimiento</h2>
@@ -112,6 +136,7 @@ pre{background:var(--bg2);border-radius:10px;padding:10px;white-space:pre-wrap;w
     <label class="lbl" for="nota">Nota (opcional)</label>
     <input type="text" id="nota" maxlength="100" placeholder="Ej.: almuerzo con amigos" autocomplete="off" enterkeyhint="done">
     <div class="count" id="notaCount">0/100</div>
+    <div class="count hidden" id="notaCut">La nota llegó recortada: si no la cambias, se conserva la original.</div>
   </section>
 
   <!-- 4: confirmar -->
@@ -120,6 +145,31 @@ pre{background:var(--bg2);border-radius:10px;padding:10px;white-space:pre-wrap;w
     <div id="out" class="hidden">
       <label class="lbl">JSON que se enviaría (prueba)</label>
       <pre id="json"></pre>
+    </div>
+  </section>
+
+  <!-- lista de movimientos (del fragmento #m= que pone el bot en el botón) -->
+  <section class="screen" id="sL">
+    <p id="listEmpty" class="empty hidden"></p>
+    <div class="list" id="list"></div>
+    <p id="listAt" class="hint hidden"></p>
+  </section>
+
+  <!-- detalle: editar o borrar -->
+  <section class="screen" id="sD">
+    <div class="sum" id="detSum"></div>
+    <button id="editBtn" class="fbtn" type="button">✏️ Editar</button>
+    <button id="delBtn" class="fbtn danger" type="button">🗑️ Borrar</button>
+    <div id="delConfirm" class="confirm hidden">
+      <p>¿Borrar este movimiento?</p>
+      <div class="two">
+        <button id="delNo" class="fbtn ghost" type="button">Cancelar</button>
+        <button id="delYes" class="fbtn danger" type="button">Sí, borrar</button>
+      </div>
+    </div>
+    <div id="delOut" class="hidden">
+      <label class="lbl">JSON que se enviaría (prueba)</label>
+      <pre id="delJson"></pre>
     </div>
   </section>
 
@@ -140,10 +190,11 @@ pre{background:var(--bg2);border-radius:10px;padding:10px;white-space:pre-wrap;w
     'Deuda': '💳', 'Otros': '📦', 'Sueldo': '💼', 'Freelance': '🧑‍💻', 'Bonificaciones': '⭐',
     'Intereses': '📈', 'Ahorro': '🐷'
   };
-  var CURRENCIES = ['CUP', 'USD', 'UYU'];
+  var CURRENCIES = ['CUP', 'USD', 'UYU']; // mismo orden que Currency::ALL del bot (índice del fragmento)
   var CUENTAS = ['Efectivo', 'Banco', 'PayPal'];
   var TITLES = ['', 'Nuevo movimiento', 'Categoría', 'Detalles', 'Confirmar'];
   var MAX_INT_DIGITS = 9;
+  var SCREENS = ['s1', 's2', 's3', 's4', 'sL', 'sD'];
 
   var wa = (window.Telegram && window.Telegram.WebApp) || null;
   // Abierta desde un KeyboardButton, initData llega vacío: detectar Telegram por platform.
@@ -152,13 +203,18 @@ pre{background:var(--bg2);border-radius:10px;padding:10px;white-space:pre-wrap;w
   var canSend = inTg && !wa.initData;
   var $ = function (id) { return document.getElementById(id); };
 
-  var st = { step: 1, t: 'g', amt: '', mon: 'CUP', cat: null, cuenta: 'Efectivo', fechaMode: 'hoy', fechaOtra: '', nota: '' };
+  function fresh() {
+    return { view: 'flow', step: 1, t: 'g', amt: '', mon: 'CUP', cat: null, cuenta: 'Efectivo', fechaMode: 'hoy', fechaOtra: '', nota: '',
+      editId: null, notaOrig: '', cut: false, sel: -1 };
+  }
+  var st = fresh();
 
   // ---- utilidades ----
   function pad2(n) { return (n < 10 ? '0' : '') + n; }
   function ymd(d) { return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()); }
   function today() { return ymd(new Date()); }
   function yesterday() { var d = new Date(); d.setDate(d.getDate() - 1); return ymd(d); }
+  function daysBefore(f, n) { var p = f.split('-'); return ymd(new Date(+p[0], +p[1] - 1, +p[2] - n)); }
   function fecha() {
     if (st.fechaMode === 'ayer') return yesterday();
     if (st.fechaMode === 'otra' && /^\d{4}-\d{2}-\d{2}$/.test(st.fechaOtra)) return st.fechaOtra;
@@ -198,19 +254,60 @@ pre{background:var(--bg2);border-radius:10px;padding:10px;white-space:pre-wrap;w
     } catch (e) { /* versión antigua */ }
   }
 
-  // ---- payload (contrato v1) ----
+  // ---- movimientos recientes: fragmento #m=<base64url de JSON> que pone el bot en la URL del botón ----
+  // {"v":1,"t":unix,"d":"YYYY-MM-DD","c":[cats],"a":[cuentas],"m":[[id,tipo,monto,monIdx,catIdx,cuentaIdx,díasAntes(,nota(,1))]]}
+  // Telegram añade sus parámetros al mismo fragmento (#m=...&tgWebAppData=...), por eso se busca "m=".
+  function b64urlDecode(s) {
+    s = s.replace(/-/g, '+').replace(/_/g, '/');
+    while (s.length % 4) s += '=';
+    var bin = atob(s), bytes = new Uint8Array(bin.length);
+    for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return new TextDecoder('utf-8').decode(bytes);
+  }
+  function readRecent() {
+    var mm = /(?:^#|[#&?])m=([A-Za-z0-9_-]+)/.exec(location.hash || '');
+    if (!mm) return null;
+    try {
+      var d = JSON.parse(b64urlDecode(mm[1]));
+      if (!d || d.v !== 1 || !Array.isArray(d.m) || !Array.isArray(d.c) || !Array.isArray(d.a) || !/^\d{4}-\d{2}-\d{2}$/.test(d.d)) return null;
+      var prev = 0, items = [];
+      d.m.forEach(function (r) {
+        if (!Array.isArray(r) || r.length < 7) return;
+        var id;
+        if (typeof r[0] === 'number') { prev += r[0]; id = String(prev); }
+        else if (typeof r[0] === 'string' && r[0]) id = r[0];
+        else return;
+        var cat = d.c[r[4]], cuenta = d.a[r[5]], mon = CURRENCIES[r[3]];
+        if (typeof cat !== 'string' || typeof cuenta !== 'string' || !mon || typeof r[2] !== 'number' || !(r[2] > 0)) return;
+        items.push({
+          id: id, t: r[1] === 1 ? 'i' : 'g', monto: r[2], mon: mon, cat: cat, cuenta: cuenta,
+          fecha: typeof r[6] === 'number' ? daysBefore(d.d, r[6]) : '',
+          nota: typeof r[7] === 'string' ? r[7] : '', cut: r[8] === 1
+        });
+      });
+      return { at: typeof d.t === 'number' ? d.t : 0, items: items };
+    } catch (e) { return null; }
+  }
+  var recent = readRecent();
+
+  // ---- payload (contrato v1: alta, edit, del) ----
+  function notaOut() {
+    // nota recortada en el fragmento y sin tocar: null = el bot conserva la descripción actual
+    if (st.editId && st.cut && st.nota === st.notaOrig) return null;
+    return cleanText(st.nota, 100);
+  }
   function buildPayload() {
-    return {
-      v: 1,
-      t: st.t,
-      monto: montoNum(),
-      mon: st.mon,
-      cat: st.cat || 'Otros',
-      cuenta: st.cuenta,
-      // hoy/ayer los resuelve el bot con su reloj: no depende de la fecha del teléfono
-      fecha: st.fechaMode === 'otra' ? fecha() : st.fechaMode,
-      nota: cleanText(st.nota, 100)
-    };
+    var p = { v: 1 };
+    if (st.editId) { p.op = 'edit'; p.id = st.editId; }
+    p.t = st.t;
+    p.monto = montoNum();
+    p.mon = st.mon;
+    p.cat = st.cat || 'Otros';
+    p.cuenta = st.cuenta;
+    // hoy/ayer los resuelve el bot con su reloj: no depende de la fecha del teléfono
+    p.fecha = st.fechaMode === 'otra' ? fecha() : st.fechaMode;
+    p.nota = notaOut();
+    return p;
   }
 
   // ---- URL params ----
@@ -224,6 +321,7 @@ pre{background:var(--bg2);border-radius:10px;padding:10px;white-space:pre-wrap;w
       if (bal) { $('bal').textContent = bal; $('bal').classList.remove('hidden'); }
     }
   } catch (e) { /* sin URLSearchParams */ }
+  var defaultMon = st.mon;
 
   // ---- render ----
   function chipList(el, items, current, attr) {
@@ -237,13 +335,15 @@ pre{background:var(--bg2);border-radius:10px;padding:10px;white-space:pre-wrap;w
       el.appendChild(b);
     });
   }
+  function withCurrent(list, cur) { return cur && list.indexOf(cur) < 0 ? [cur].concat(list) : list; }
+  function renderCuentas() { chipList($('cuentas'), withCurrent(CUENTAS, st.cuenta), st.cuenta, 'data-cuenta'); }
   function renderAmount() {
     $('amtNum').textContent = fmtAmt(st.amt);
     $('amtCur').textContent = st.mon;
     $('amount').classList.toggle('zero', montoNum() <= 0);
   }
   function renderCats() {
-    var list = st.t === 'i' ? CATS_I : CATS_G;
+    var list = withCurrent(st.t === 'i' ? CATS_I : CATS_G, st.cat);
     var el = $('cats');
     el.textContent = '';
     list.forEach(function (c) {
@@ -257,6 +357,16 @@ pre{background:var(--bg2);border-radius:10px;padding:10px;white-space:pre-wrap;w
       el.appendChild(b);
     });
   }
+  function rowsInto(el, rows, bigIndex) {
+    el.textContent = '';
+    rows.forEach(function (r, i) {
+      var d = document.createElement('div'); d.className = 'row';
+      var a = document.createElement('span'); a.textContent = r[0];
+      var b = document.createElement('span'); b.textContent = r[1];
+      if (i === bigIndex) b.className = 'big';
+      d.appendChild(a); d.appendChild(b); el.appendChild(d);
+    });
+  }
   function renderSummary() {
     var p = buildPayload();
     var rows = [
@@ -266,33 +376,85 @@ pre{background:var(--bg2);border-radius:10px;padding:10px;white-space:pre-wrap;w
       ['Cuenta', p.cuenta],
       ['Fecha', fmtFecha(fecha())]
     ];
-    if (p.nota) rows.push(['Nota', p.nota]);
-    var el = $('sum');
+    if (p.nota === null) rows.push(['Nota', st.notaOrig + '… (se conserva)']);
+    else if (p.nota) rows.push(['Nota', p.nota]);
+    rowsInto($('sum'), rows, 1);
+  }
+  function renderSegs() {
+    Array.prototype.forEach.call($('tipo').children, function (c) { c.classList.toggle('on', c.getAttribute('data-t') === st.t); });
+    Array.prototype.forEach.call($('fechas').children, function (c) { c.classList.toggle('on', c.getAttribute('data-f') === st.fechaMode); });
+    var inp = $('fechaInput');
+    inp.classList.toggle('hidden', st.fechaMode !== 'otra');
+    inp.value = st.fechaMode === 'otra' ? st.fechaOtra : '';
+    $('nota').value = st.nota;
+    $('notaCount').textContent = st.nota.length + '/100';
+    $('notaCut').classList.toggle('hidden', !(st.editId && st.cut));
+    chipList($('mon'), CURRENCIES, st.mon, 'data-mon');
+    renderCuentas();
+    renderAmount();
+  }
+  function itemTitle(it) { return it.nota ? it.nota + (it.cut ? '…' : '') : it.cat; }
+  function shortDate(f) { if (!f) return '¿fecha?'; var p = f.split('-'); return f === today() ? 'Hoy' : (f === yesterday() ? 'Ayer' : p[2] + '/' + p[1] + '/' + p[0].slice(2)); }
+  function renderList() {
+    var el = $('list'), empty = $('listEmpty');
     el.textContent = '';
-    rows.forEach(function (r, i) {
-      var d = document.createElement('div'); d.className = 'row';
-      var a = document.createElement('span'); a.textContent = r[0];
-      var b = document.createElement('span'); b.textContent = r[1];
-      if (i === 1) b.className = 'big';
-      d.appendChild(a); d.appendChild(b); el.appendChild(d);
+    if (!recent) { empty.textContent = 'Manda /app para cargar tus movimientos.'; empty.classList.remove('hidden'); $('listAt').classList.add('hidden'); return; }
+    if (!recent.items.length) { empty.textContent = 'Todavía no hay movimientos. Si acabas de anotar uno, manda /app para refrescar.'; empty.classList.remove('hidden'); }
+    else empty.classList.add('hidden');
+    recent.items.forEach(function (it, i) {
+      var b = document.createElement('button');
+      b.type = 'button'; b.className = 'item'; b.setAttribute('data-i', String(i)); b.setAttribute('data-id', it.id);
+      var e = document.createElement('span'); e.className = 'ie'; e.textContent = EMOJI[it.cat] || (it.t === 'i' ? '💰' : '💸');
+      var t = document.createElement('span'); t.className = 'it';
+      var tb = document.createElement('b'); tb.textContent = itemTitle(it);
+      var ts = document.createElement('small'); ts.textContent = shortDate(it.fecha) + ' · ' + it.cat + ' · ' + it.cuenta;
+      t.appendChild(tb); t.appendChild(ts);
+      var a = document.createElement('span'); a.className = 'ia ' + it.t; a.textContent = (it.t === 'g' ? '−' : '+') + fmtMonto(it.monto) + ' ' + it.mon;
+      b.appendChild(e); b.appendChild(t); b.appendChild(a);
+      el.appendChild(b);
     });
+    var at = $('listAt');
+    if (recent.at) {
+      var d = new Date(recent.at * 1000);
+      at.textContent = 'Lista del ' + pad2(d.getDate()) + '/' + pad2(d.getMonth() + 1) + ' ' + pad2(d.getHours()) + ':' + pad2(d.getMinutes())
+        + '. Se actualiza con cada cambio; si falta algo, manda /app.';
+      at.classList.remove('hidden');
+    } else at.classList.add('hidden');
+  }
+  function renderDetail() {
+    var it = recent.items[st.sel];
+    var rows = [
+      ['Tipo', it.t === 'g' ? 'Gasto' : 'Ingreso'],
+      ['Monto', fmtMonto(it.monto) + ' ' + it.mon],
+      ['Categoría', it.cat],
+      ['Cuenta', it.cuenta],
+      ['Fecha', it.fecha ? fmtFecha(it.fecha) : '¿?']
+    ];
+    if (it.nota) rows.push(['Nota', it.nota + (it.cut ? '…' : '')]);
+    rowsInto($('detSum'), rows, 1);
+    $('delConfirm').classList.add('hidden');
+    $('delBtn').classList.remove('hidden');
+    $('editBtn').classList.remove('hidden');
+    $('delOut').classList.add('hidden');
   }
 
   function mainState() {
+    if (st.view !== 'flow') return { text: '', visible: false, active: false };
     if (st.step === 1) return { text: 'Siguiente', visible: true, active: montoNum() > 0 };
     if (st.step === 2) return { text: 'Siguiente', visible: !!st.cat, active: !!st.cat };
     if (st.step === 3) return { text: 'Siguiente', visible: true, active: true };
-    return { text: 'Guardar', visible: true, active: true };
+    return { text: st.editId ? 'Guardar cambios' : 'Guardar', visible: true, active: true };
   }
+  function canGoBack() { return st.view === 'detail' || (st.view === 'flow' && (st.step > 1 || !!st.editId)); }
   function syncButtons() {
     var ms = mainState();
     if (inTg) {
       try {
-        wa.MainButton.setText(ms.text);
+        wa.MainButton.setText(ms.text || 'Siguiente');
         if (ms.visible) wa.MainButton.show(); else wa.MainButton.hide();
         if (ms.active) wa.MainButton.enable(); else wa.MainButton.disable();
       } catch (e) {}
-      try { if (st.step > 1) wa.BackButton.show(); else wa.BackButton.hide(); } catch (e) {}
+      try { if (canGoBack()) wa.BackButton.show(); else wa.BackButton.hide(); } catch (e) {}
     } else {
       var f = $('fbtn');
       f.textContent = ms.text;
@@ -300,17 +462,57 @@ pre{background:var(--bg2);border-radius:10px;padding:10px;white-space:pre-wrap;w
       f.disabled = !ms.active;
     }
     var backSupported = inTg && wa.BackButton && (!wa.isVersionAtLeast || wa.isVersionAtLeast('6.1'));
-    $('back').classList.toggle('hidden', backSupported || st.step === 1);
+    $('back').classList.toggle('hidden', backSupported || !canGoBack());
+    // pestañas: solo al empezar un alta o en la lista
+    var tabsOn = st.view === 'list' || (st.view === 'flow' && st.step === 1 && !st.editId);
+    $('tabs').classList.toggle('hidden', !tabsOn);
+    Array.prototype.forEach.call($('tabs').children, function (c) { c.classList.toggle('on', c.getAttribute('data-view') === (st.view === 'list' ? 'list' : 'new')); });
   }
-  function go(step) {
-    st.step = step;
-    for (var i = 1; i <= 4; i++) $('s' + i).classList.toggle('on', i === step);
-    $('title').textContent = TITLES[step];
-    $('steps').textContent = step + '/4';
-    if (step === 2) renderCats();
-    if (step === 4) { renderSummary(); $('out').classList.add('hidden'); }
+  function showScreen(id, title, steps) {
+    SCREENS.forEach(function (s) { $(s).classList.toggle('on', s === id); });
+    $('title').textContent = title;
+    $('steps').textContent = steps;
     syncButtons();
     window.scrollTo(0, 0);
+  }
+  function go(step) {
+    st.view = 'flow';
+    st.step = step;
+    if (step === 2) renderCats();
+    if (step === 4) { renderSummary(); $('out').classList.add('hidden'); }
+    showScreen('s' + step, st.editId ? (step === 1 ? 'Editar movimiento' : TITLES[step] + ' (edición)') : TITLES[step], step + '/4');
+  }
+  function newEntry() {
+    if (st.editId) { st = fresh(); st.mon = defaultMon; renderSegs(); }
+    go(1);
+  }
+  function showList() {
+    if (st.editId) { st = fresh(); st.mon = defaultMon; renderSegs(); }
+    st.view = 'list';
+    renderList();
+    showScreen('sL', 'Movimientos', recent && recent.items.length ? String(recent.items.length) : '');
+  }
+  function showDetail(i) {
+    st.view = 'detail';
+    st.sel = i;
+    renderDetail();
+    showScreen('sD', 'Movimiento', '');
+  }
+  function amtString(n) { return n.toFixed(2).replace(/\.?0+$/, '').replace('.', ','); }
+  function startEdit() {
+    var it = recent.items[st.sel];
+    var sel = st.sel;
+    st = fresh();
+    st.sel = sel;
+    st.editId = it.id;
+    st.t = it.t; st.amt = amtString(it.monto); st.mon = it.mon; st.cat = it.cat; st.cuenta = it.cuenta;
+    if (it.fecha === today()) st.fechaMode = 'hoy';
+    else if (it.fecha === yesterday()) st.fechaMode = 'ayer';
+    else if (it.fecha) { st.fechaMode = 'otra'; st.fechaOtra = it.fecha; }
+    st.nota = it.nota; st.notaOrig = it.nota; st.cut = it.cut;
+    renderSegs();
+    haptic('imp', 'light');
+    go(1);
   }
 
   // ---- acciones ----
@@ -330,22 +532,24 @@ pre{background:var(--bg2);border-radius:10px;padding:10px;white-space:pre-wrap;w
     syncButtons();
   }
   function next() {
+    if (st.view !== 'flow') return;
     if (st.step === 1) { if (montoNum() > 0) { haptic('imp', 'light'); go(2); } else haptic('not', 'error'); }
     else if (st.step === 2) { if (st.cat) go(3); }
     else if (st.step === 3) { haptic('imp', 'light'); go(4); }
     else save();
   }
   function back() {
-    if (st.step > 1) { haptic('sel'); go(st.step - 1); }
+    if (st.view === 'detail') { haptic('sel'); showList(); }
+    else if (st.view === 'flow' && st.step > 1) { haptic('sel'); go(st.step - 1); }
+    else if (st.view === 'flow' && st.editId) { haptic('sel'); var i = st.sel; st = fresh(); st.mon = defaultMon; renderSegs(); showDetail(i); }
   }
   var WRONG_LAUNCH = 'Ciérrala y ábrela con el botón «➕ Anotar» del teclado del chat (si no lo ves, manda /app).';
   function showErr(msg) {
     haptic('not', 'error');
     var n = $('notice'); n.textContent = msg; n.classList.remove('hidden'); window.scrollTo(0, 0);
   }
-  function save() {
-    var p = buildPayload();
-    if (!(p.monto > 0)) { haptic('not', 'error'); go(1); return; }
+  // Envía al bot (sendData cierra la Mini App). Fuera de Telegram muestra el JSON en outBox/pre.
+  function send(p, outBox, pre) {
     var json = JSON.stringify(p);
     if (new Blob([json]).size >= 4096) { haptic('not', 'error'); return; }
     if (inTg && !canSend) { showErr(WRONG_LAUNCH); return; }
@@ -354,13 +558,41 @@ pre{background:var(--bg2);border-radius:10px;padding:10px;white-space:pre-wrap;w
       try { wa.sendData(json); } catch (e) { showErr('No se pudo enviar (' + (e && e.message || e) + '). ' + WRONG_LAUNCH); return; }
       setTimeout(function () { showErr('Telegram no cerró la Mini App: el dato no se envió. ' + WRONG_LAUNCH); }, 2500);
     } else {
-      $('json').textContent = json;
-      $('out').classList.remove('hidden');
+      $(pre).textContent = json;
+      $(outBox).classList.remove('hidden');
       window.__lastJson = json;
     }
   }
+  function save() {
+    var p = buildPayload();
+    if (!(p.monto > 0)) { haptic('not', 'error'); go(1); return; }
+    send(p, 'out', 'json');
+  }
+  function del() {
+    var it = recent.items[st.sel];
+    send({ v: 1, op: 'del', id: it.id }, 'delOut', 'delJson');
+  }
 
   // ---- eventos ----
+  $('tabs').addEventListener('click', function (e) {
+    var b = e.target.closest('button[data-view]'); if (!b) return;
+    haptic('sel');
+    if (b.getAttribute('data-view') === 'list') showList(); else newEntry();
+  });
+  $('list').addEventListener('click', function (e) {
+    var b = e.target.closest('button[data-i]'); if (!b) return;
+    haptic('sel');
+    showDetail(Number(b.getAttribute('data-i')));
+  });
+  $('editBtn').addEventListener('click', startEdit);
+  $('delBtn').addEventListener('click', function () {
+    haptic('imp', 'medium');
+    $('delConfirm').classList.remove('hidden');
+    $('delBtn').classList.add('hidden');
+    $('editBtn').classList.add('hidden');
+  });
+  $('delNo').addEventListener('click', function () { haptic('sel'); renderDetail(); });
+  $('delYes').addEventListener('click', del);
   $('tipo').addEventListener('click', function (e) {
     var b = e.target.closest('button[data-t]'); if (!b) return;
     var t = b.getAttribute('data-t');
@@ -385,7 +617,7 @@ pre{background:var(--bg2);border-radius:10px;padding:10px;white-space:pre-wrap;w
   $('cuentas').addEventListener('click', function (e) {
     var b = e.target.closest('button[data-cuenta]'); if (!b) return;
     st.cuenta = b.getAttribute('data-cuenta'); haptic('sel');
-    chipList($('cuentas'), CUENTAS, st.cuenta, 'data-cuenta');
+    renderCuentas();
   });
   $('fechas').addEventListener('click', function (e) {
     var b = e.target.closest('button[data-f]'); if (!b) return;
@@ -393,7 +625,7 @@ pre{background:var(--bg2);border-radius:10px;padding:10px;white-space:pre-wrap;w
     Array.prototype.forEach.call(this.children, function (c) { c.classList.toggle('on', c === b); });
     var inp = $('fechaInput');
     inp.classList.toggle('hidden', st.fechaMode !== 'otra');
-    if (st.fechaMode === 'otra') { if (!inp.value) inp.value = today(); st.fechaOtra = inp.value; }
+    if (st.fechaMode === 'otra') { if (!inp.value) inp.value = st.fechaOtra || today(); st.fechaOtra = inp.value; }
   });
   $('fechaInput').max = today();
   $('fechaInput').addEventListener('change', function () { st.fechaOtra = this.value; });
@@ -404,7 +636,7 @@ pre{background:var(--bg2);border-radius:10px;padding:10px;white-space:pre-wrap;w
   $('nota').addEventListener('keydown', function (e) { if (e.key === 'Enter') this.blur(); });
   // teclado físico (pruebas en PC)
   document.addEventListener('keydown', function (e) {
-    if (st.step !== 1) return;
+    if (st.view !== 'flow' || st.step !== 1) return;
     if (/^[0-9]$/.test(e.key)) key(e.key);
     else if (e.key === ',' || e.key === '.') key(',');
     else if (e.key === 'Backspace') key('del');
@@ -414,9 +646,8 @@ pre{background:var(--bg2);border-radius:10px;padding:10px;white-space:pre-wrap;w
   $('fbtn').addEventListener('click', next);
 
   // ---- init ----
-  chipList($('mon'), CURRENCIES, st.mon, 'data-mon');
-  chipList($('cuentas'), CUENTAS, st.cuenta, 'data-cuenta');
-  renderAmount();
+  if (recent && recent.items.length) $('tabList').textContent = '📋 Movimientos (' + recent.items.length + ')';
+  renderSegs();
   if (inTg) {
     try { wa.ready(); wa.expand(); } catch (e) {}
     try { wa.MainButton.onClick(next); } catch (e) {}
