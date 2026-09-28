@@ -146,7 +146,10 @@ pre{background:var(--bg2);border-radius:10px;padding:10px;white-space:pre-wrap;w
   var MAX_INT_DIGITS = 9;
 
   var wa = (window.Telegram && window.Telegram.WebApp) || null;
-  var inTg = !!(wa && wa.initData && typeof wa.sendData === 'function');
+  // Abierta desde un KeyboardButton, initData llega vacío: detectar Telegram por platform.
+  var inTg = !!(wa && typeof wa.sendData === 'function' && wa.platform && wa.platform !== 'unknown');
+  // Con initData presente se abrió desde el menú o un botón inline, donde sendData no hace nada.
+  var canSend = inTg && !wa.initData;
   var $ = function (id) { return document.getElementById(id); };
 
   var st = { step: 1, t: 'g', amt: '', mon: 'CUP', cat: null, cuenta: 'Efectivo', fechaMode: 'hoy', fechaOtra: '', nota: '' };
@@ -334,15 +337,21 @@ pre{background:var(--bg2);border-radius:10px;padding:10px;white-space:pre-wrap;w
   function back() {
     if (st.step > 1) { haptic('sel'); go(st.step - 1); }
   }
+  var WRONG_LAUNCH = 'Ciérrala y ábrela con el botón «➕ Anotar» del teclado del chat (si no lo ves, manda /app).';
+  function showErr(msg) {
+    haptic('not', 'error');
+    var n = $('notice'); n.textContent = msg; n.classList.remove('hidden'); window.scrollTo(0, 0);
+  }
   function save() {
     var p = buildPayload();
     if (!(p.monto > 0)) { haptic('not', 'error'); go(1); return; }
     var json = JSON.stringify(p);
     if (new Blob([json]).size >= 4096) { haptic('not', 'error'); return; }
+    if (inTg && !canSend) { showErr(WRONG_LAUNCH); return; }
     if (inTg) {
       haptic('not', 'success');
-      // sendData cierra la Mini App automáticamente.
-      try { wa.sendData(json); } catch (e) { try { wa.close(); } catch (e2) {} }
+      try { wa.sendData(json); } catch (e) { showErr('No se pudo enviar (' + (e && e.message || e) + '). ' + WRONG_LAUNCH); return; }
+      setTimeout(function () { showErr('Telegram no cerró la Mini App: el dato no se envió. ' + WRONG_LAUNCH); }, 2500);
     } else {
       $('json').textContent = json;
       $('out').classList.remove('hidden');
@@ -411,6 +420,7 @@ pre{background:var(--bg2);border-radius:10px;padding:10px;white-space:pre-wrap;w
     try { wa.ready(); wa.expand(); } catch (e) {}
     try { wa.MainButton.onClick(next); } catch (e) {}
     try { wa.BackButton.onClick(back); } catch (e) {}
+    if (!canSend) { $('notice').textContent = WRONG_LAUNCH; $('notice').classList.remove('hidden'); }
   } else {
     $('notice').classList.remove('hidden');
   }

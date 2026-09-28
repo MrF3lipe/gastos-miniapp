@@ -21,7 +21,7 @@ function ymdInTz(offsetDays) {
 const STUB = `
 window.__tg = { sent: [], closed: 0, main: { text: '', visible: false, active: true, cb: null }, back: { visible: false, cb: null }, haptics: 0 };
 window.Telegram = { WebApp: {
-  initData: 'query_id=TEST&user=%7B%7D&auth_date=1&hash=x', version: '7.0', platform: 'test',
+  initData: location.search.indexOf('menu=1') >= 0 ? 'query_id=TEST&user=%7B%7D&auth_date=1&hash=x' : '', version: '7.0', platform: 'android',
   isVersionAtLeast: function () { return true; },
   ready: function () {}, expand: function () {},
   close: function () { window.__tg.closed++; },
@@ -168,6 +168,22 @@ async function shot(page, name) { if (SHOTS) await page.screenshot({ path: path.
       assert.deepStrictEqual(errors, []);
       await shot(page, '6-fuera-de-telegram-json.png');
       ok('navegador (sin Telegram) -> ' + json);
+      await ctx.close();
+    }
+    // 5) Abierta desde el menú (initData presente): sendData no sirve, aviso visible y no envía
+    {
+      const { ctx, page, errors } = await newPage(browser, base, '?menu=1', true);
+      assert.ok(await page.isVisible('#notice'));
+      assert.ok((await page.textContent('#notice')).includes('➕ Anotar'));
+      await keys(page, ['5']);
+      await mainClick(page);
+      await page.click('#cats button[data-cat="Otros"]');
+      await mainClick(page); await mainClick(page);
+      const s = await tg(page);
+      assert.deepStrictEqual(s.sent, []);
+      assert.ok(await page.isVisible('#notice'));
+      assert.deepStrictEqual(errors, []);
+      ok('abierta desde el menú -> aviso, sin envío');
       await ctx.close();
     }
     console.log(`\n${passed} pruebas OK`);
