@@ -147,7 +147,6 @@ input.bigin{font-size:24px;font-weight:700;text-align:center}
     <button type="button" data-view="list" id="tabList"><span class="te">📋</span><span class="tl" data-s="Movim.">Movimientos</span></button>
     <button type="button" data-view="budgets" id="tabBud"><span class="te">🎯</span><span class="tl" data-s="Presup.">Presupuestos</span></button>
     <button type="button" data-view="fixed" id="tabFix"><span class="te">📌</span><span class="tl">Fijos</span></button>
-    <button type="button" data-view="charts" id="tabCh"><span class="te">📊</span><span class="tl">Gráficos</span></button>
   </div>
   <div class="top">
     <button id="back" class="back hidden" type="button">‹ Atrás</button>
@@ -329,6 +328,7 @@ input.bigin{font-size:24px;font-weight:700;text-align:center}
       <div class="gtbl" id="gTbl"></div>
       <p id="gNote" class="hint"></p>
     </div>
+    <p id="gHint" class="hint hidden">Para anotar o editar, usa el botón «➕ Anotar» del teclado.</p>
   </section>
 
   <button id="fbtn" class="fbtn hidden" type="button">Siguiente</button>
@@ -529,6 +529,8 @@ input.bigin{font-size:24px;font-weight:700;text-align:center}
     }
   } catch (e) { /* sin URLSearchParams */ }
   var defaultMon = st.mon;
+  // botón «📈 Gráficos» del teclado: URL con ?tab=g, abre directo en Gráficos, sin pestañas (solo mostrar)
+  var chartsMode = /[?&]tab=g(&|$)/.test(location.search || '');
 
   // ---- render ----
   function chipList(el, items, current, attr) {
@@ -673,7 +675,7 @@ input.bigin{font-size:24px;font-weight:700;text-align:center}
     $('back').classList.toggle('hidden', backSupported || !canGoBack());
     // pestañas: solo al empezar un alta o en la lista
     var tabView = st.view === 'list' || st.view === 'budgets' || st.view === 'fixed' || st.view === 'charts';
-    var tabsOn = tabView || (st.view === 'flow' && st.step === 1 && !st.editId);
+    var tabsOn = !chartsMode && (tabView || (st.view === 'flow' && st.step === 1 && !st.editId));
     $('tabs').classList.toggle('hidden', !tabsOn);
     var tab = tabView ? st.view : 'new';
     Array.prototype.forEach.call($('tabs').children, function (c) { c.classList.toggle('on', c.getAttribute('data-view') === tab); });
@@ -1353,11 +1355,11 @@ input.bigin{font-size:24px;font-weight:700;text-align:center}
     try { wa.ready(); wa.expand(); } catch (e) {}
     try { wa.MainButton.onClick(next); } catch (e) {}
     try { wa.BackButton.onClick(back); } catch (e) {}
-    if (!canSend) { $('notice').textContent = WRONG_LAUNCH; $('notice').classList.remove('hidden'); }
+    if (!canSend && !chartsMode) { $('notice').textContent = WRONG_LAUNCH; $('notice').classList.remove('hidden'); }
   } else {
     $('notice').classList.remove('hidden');
   }
-  go(1);
+  if (chartsMode) { $('gHint').classList.remove('hidden'); showCharts(); } else go(1);
 })();
 </script>
 </body>
