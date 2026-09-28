@@ -65,7 +65,18 @@ input[type=date]{margin-top:8px}
 .fbtn:disabled{opacity:.45}
 pre{background:var(--bg2);border-radius:10px;padding:10px;white-space:pre-wrap;word-break:break-all;font-size:13px;user-select:text;-webkit-user-select:text}
 .tabs{margin-bottom:8px}
-.tabs button{font-size:15px}
+.tabs button{font-size:13px;padding:9px 4px;white-space:nowrap}
+.item .lv{font-size:13px;font-weight:700;white-space:nowrap}
+.item .lv.ok{color:var(--ok)}
+.item .lv.warn{color:#d18b00}
+.item .lv.over{color:var(--danger)}
+.item .lv.none{color:var(--link)}
+.bar{height:4px;border-radius:2px;background:rgba(128,128,128,.25);margin-top:4px;overflow:hidden}
+.bar i{display:block;height:100%;background:var(--ok)}
+.bar i.warn{background:#d18b00}
+.bar i.over{background:var(--danger)}
+input.bigin{font-size:24px;font-weight:700;text-align:center}
+.err{color:var(--danger)!important}
 .list{display:flex;flex-direction:column;gap:6px}
 .item{display:flex;align-items:center;gap:10px;width:100%;border:0;background:var(--bg2);color:var(--text);border-radius:12px;padding:10px 12px;text-align:left;cursor:pointer;font:inherit}
 .item:active{opacity:.6}
@@ -94,6 +105,7 @@ pre{background:var(--bg2);border-radius:10px;padding:10px;white-space:pre-wrap;w
   <div class="seg tabs" id="tabs">
     <button type="button" data-view="new" class="on">➕ Nuevo</button>
     <button type="button" data-view="list" id="tabList">📋 Movimientos</button>
+    <button type="button" data-view="budgets" id="tabBud">🎯 Presupuestos</button>
   </div>
   <div class="top">
     <button id="back" class="back hidden" type="button">‹ Atrás</button>
@@ -173,6 +185,26 @@ pre{background:var(--bg2);border-radius:10px;padding:10px;white-space:pre-wrap;w
     </div>
   </section>
 
+  <!-- presupuestos mensuales por categoría de gasto (y moneda) -->
+  <section class="screen" id="sB">
+    <p id="budNote" class="hint"></p>
+    <div class="list" id="budList"></div>
+  </section>
+
+  <!-- poner / cambiar / quitar un presupuesto -->
+  <section class="screen" id="sBE">
+    <div class="chips" id="budMon"></div>
+    <label class="lbl" for="budAmt">Monto mensual</label>
+    <input type="text" id="budAmt" class="bigin" inputmode="decimal" maxlength="16" placeholder="Ej.: 10.000" autocomplete="off" enterkeyhint="done">
+    <p id="budInfo" class="hint"></p>
+    <button id="budSave" class="fbtn" type="button">Guardar presupuesto</button>
+    <button id="budDel" class="fbtn danger hidden" type="button">Quitar presupuesto</button>
+    <div id="budOut" class="hidden">
+      <label class="lbl">JSON que se enviaría (prueba)</label>
+      <pre id="budJson"></pre>
+    </div>
+  </section>
+
   <button id="fbtn" class="fbtn hidden" type="button">Siguiente</button>
 </div>
 
@@ -194,7 +226,8 @@ pre{background:var(--bg2);border-radius:10px;padding:10px;white-space:pre-wrap;w
   var CUENTAS = ['Efectivo', 'Banco', 'PayPal'];
   var TITLES = ['', 'Nuevo movimiento', 'Categoría', 'Detalles', 'Confirmar'];
   var MAX_INT_DIGITS = 9;
-  var SCREENS = ['s1', 's2', 's3', 's4', 'sL', 'sD'];
+  var SCREENS = ['s1', 's2', 's3', 's4', 'sL', 'sD', 'sB', 'sBE'];
+  var MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
 
   var wa = (window.Telegram && window.Telegram.WebApp) || null;
   // Abierta desde un KeyboardButton, initData llega vacío: detectar Telegram por platform.
@@ -205,7 +238,7 @@ pre{background:var(--bg2);border-radius:10px;padding:10px;white-space:pre-wrap;w
 
   function fresh() {
     return { view: 'flow', step: 1, t: 'g', amt: '', mon: 'CUP', cat: null, cuenta: 'Efectivo', fechaMode: 'hoy', fechaOtra: '', nota: '',
-      editId: null, notaOrig: '', cut: false, sel: -1 };
+      editId: null, notaOrig: '', cut: false, sel: -1, budCat: null, budMon: 'CUP' };
   }
   var st = fresh();
 
@@ -255,7 +288,8 @@ pre{background:var(--bg2);border-radius:10px;padding:10px;white-space:pre-wrap;w
   }
 
   // ---- movimientos recientes: fragmento #m=<base64url de JSON> que pone el bot en la URL del botón ----
-  // {"v":1,"t":unix,"d":"YYYY-MM-DD","c":[cats],"a":[cuentas],"m":[[id,tipo,monto,monIdx,catIdx,cuentaIdx,díasAntes(,nota(,1))]]}
+  // {"v":1,"t":unix,"d":"YYYY-MM-DD","c":[cats],"a":[cuentas],"m":[[id,tipo,monto,monIdx,catIdx,cuentaIdx,díasAntes(,nota(,1))]],
+  //  "b":[[catIdx,monIdx,presupuesto,gastadoDelMes]]}  ("b" solo si hay presupuestos)
   // Telegram añade sus parámetros al mismo fragmento (#m=...&tgWebAppData=...), por eso se busca "m=".
   function b64urlDecode(s) {
     s = s.replace(/-/g, '+').replace(/_/g, '/');
@@ -285,7 +319,14 @@ pre{background:var(--bg2);border-radius:10px;padding:10px;white-space:pre-wrap;w
           nota: typeof r[7] === 'string' ? r[7] : '', cut: r[8] === 1
         });
       });
-      return { at: typeof d.t === 'number' ? d.t : 0, items: items };
+      var budgets = [];
+      (Array.isArray(d.b) ? d.b : []).forEach(function (r) {
+        if (!Array.isArray(r) || r.length < 4) return;
+        var cat = d.c[r[0]], mon = CURRENCIES[r[1]];
+        if (typeof cat !== 'string' || !mon || typeof r[2] !== 'number' || !(r[2] > 0) || typeof r[3] !== 'number') return;
+        budgets.push({ cat: cat, mon: mon, monto: r[2], gastado: r[3] });
+      });
+      return { at: typeof d.t === 'number' ? d.t : 0, d: d.d, items: items, budgets: budgets };
     } catch (e) { return null; }
   }
   var recent = readRecent();
@@ -445,7 +486,7 @@ pre{background:var(--bg2);border-radius:10px;padding:10px;white-space:pre-wrap;w
     if (st.step === 3) return { text: 'Siguiente', visible: true, active: true };
     return { text: st.editId ? 'Guardar cambios' : 'Guardar', visible: true, active: true };
   }
-  function canGoBack() { return st.view === 'detail' || (st.view === 'flow' && (st.step > 1 || !!st.editId)); }
+  function canGoBack() { return st.view === 'detail' || st.view === 'budgetEdit' || (st.view === 'flow' && (st.step > 1 || !!st.editId)); }
   function syncButtons() {
     var ms = mainState();
     if (inTg) {
@@ -464,9 +505,10 @@ pre{background:var(--bg2);border-radius:10px;padding:10px;white-space:pre-wrap;w
     var backSupported = inTg && wa.BackButton && (!wa.isVersionAtLeast || wa.isVersionAtLeast('6.1'));
     $('back').classList.toggle('hidden', backSupported || !canGoBack());
     // pestañas: solo al empezar un alta o en la lista
-    var tabsOn = st.view === 'list' || (st.view === 'flow' && st.step === 1 && !st.editId);
+    var tabsOn = st.view === 'list' || st.view === 'budgets' || (st.view === 'flow' && st.step === 1 && !st.editId);
     $('tabs').classList.toggle('hidden', !tabsOn);
-    Array.prototype.forEach.call($('tabs').children, function (c) { c.classList.toggle('on', c.getAttribute('data-view') === (st.view === 'list' ? 'list' : 'new')); });
+    var tab = st.view === 'list' || st.view === 'budgets' ? st.view : 'new';
+    Array.prototype.forEach.call($('tabs').children, function (c) { c.classList.toggle('on', c.getAttribute('data-view') === tab); });
   }
   function showScreen(id, title, steps) {
     SCREENS.forEach(function (s) { $(s).classList.toggle('on', s === id); });
@@ -492,6 +534,104 @@ pre{background:var(--bg2);border-radius:10px;padding:10px;white-space:pre-wrap;w
     renderList();
     showScreen('sL', 'Movimientos', recent && recent.items.length ? String(recent.items.length) : '');
   }
+  // ---- presupuestos ----
+  function budgetsOf(cat) {
+    return recent ? recent.budgets.filter(function (b) { return b.cat.toLowerCase() === cat.toLowerCase(); }) : [];
+  }
+  function budgetFor(cat, mon) { return budgetsOf(cat).filter(function (b) { return b.mon === mon; })[0] || null; }
+  function pct(b) { return Math.floor(Math.round(b.gastado * 100) * 100 / Math.round(b.monto * 100)); }
+  function lvlClass(b) { var p = Math.round(b.gastado * 100), m = Math.round(b.monto * 100); return p >= m ? 'over' : (p * 100 >= m * 80 ? 'warn' : 'ok'); }
+  function budgetCats() {
+    var list = CATS_G.slice();
+    if (recent) recent.budgets.forEach(function (b) {
+      if (!list.some(function (c) { return c.toLowerCase() === b.cat.toLowerCase(); })) list.push(b.cat);
+    });
+    return list;
+  }
+  function renderBudgets() {
+    var note = $('budNote');
+    if (recent) {
+      var p = recent.d.split('-');
+      note.textContent = 'Gastado en ' + MESES[+p[1] - 1] + ' ' + p[0] + ' / presupuesto mensual. Toca una categoría para ponerlo, cambiarlo o quitarlo.';
+      note.classList.remove('err');
+    } else {
+      note.textContent = 'Manda /app para ver tus presupuestos y lo gastado. Igual puedes poner uno tocando una categoría.';
+      note.classList.add('err');
+    }
+    var el = $('budList');
+    el.textContent = '';
+    budgetCats().forEach(function (cat) {
+      var bs = budgetsOf(cat);
+      var b = document.createElement('button');
+      b.type = 'button'; b.className = 'item'; b.setAttribute('data-cat', cat);
+      var e = document.createElement('span'); e.className = 'ie'; e.textContent = EMOJI[cat] || '•';
+      var t = document.createElement('span'); t.className = 'it';
+      var tb = document.createElement('b'); tb.textContent = cat;
+      var ts = document.createElement('small');
+      ts.textContent = bs.length ? bs.map(function (x) { return fmtMonto(x.gastado) + ' / ' + fmtMonto(x.monto) + ' ' + x.mon; }).join(' · ') : 'Sin presupuesto';
+      t.appendChild(tb); t.appendChild(ts);
+      if (bs.length) {
+        var bar = document.createElement('span'); bar.className = 'bar';
+        var fill = document.createElement('i'); fill.className = lvlClass(bs[0]); fill.style.width = Math.min(100, pct(bs[0])) + '%';
+        bar.appendChild(fill); t.appendChild(bar);
+      }
+      var lv = document.createElement('span');
+      if (bs.length) {
+        var worst = bs.slice().sort(function (x, y) { return pct(y) - pct(x); })[0];
+        lv.className = 'lv ' + lvlClass(worst);
+        lv.textContent = { ok: '✅ ', warn: '⚠️ ', over: '🚨 ' }[lvlClass(worst)] + pct(worst) + '%';
+      } else { lv.className = 'lv none'; lv.textContent = '＋'; }
+      b.appendChild(e); b.appendChild(t); b.appendChild(lv);
+      el.appendChild(b);
+    });
+  }
+  function showBudgets() {
+    if (st.editId) { st = fresh(); st.mon = defaultMon; renderSegs(); }
+    st.view = 'budgets';
+    renderBudgets();
+    showScreen('sB', 'Presupuestos', '');
+  }
+  function fmtInput(n) { return n.toFixed(2).replace(/\.?0+$/, '').replace('.', ',').replace(/\B(?=(\d{3})+(?!\d))/g, '.'); }
+  function renderBudgetEdit() {
+    chipList($('budMon'), CURRENCIES, st.budMon, 'data-mon');
+    var b = budgetFor(st.budCat, st.budMon);
+    $('budAmt').value = b ? fmtInput(b.monto) : '';
+    $('budDel').classList.toggle('hidden', !b);
+    $('budSave').textContent = b ? 'Cambiar presupuesto' : 'Poner presupuesto';
+    var info = $('budInfo');
+    info.classList.remove('err');
+    if (!recent) info.textContent = 'Sin datos del mes (manda /app para verlos).';
+    else if (b) info.textContent = 'Gastado este mes: ' + fmtMonto(b.gastado) + ' ' + b.mon + ' de ' + fmtMonto(b.monto) + ' (' + pct(b) + '%).';
+    else info.textContent = 'Sin presupuesto en ' + st.budMon + '.';
+    $('budOut').classList.add('hidden');
+  }
+  function showBudgetEdit(cat) {
+    st.view = 'budgetEdit';
+    st.budCat = cat;
+    var bs = budgetsOf(cat);
+    st.budMon = bs.length ? bs[0].mon : defaultMon;
+    renderBudgetEdit();
+    showScreen('sBE', cat, '');
+  }
+  // "10.000" | "1500,5" | "99.99" -> número con 2 decimales como máximo, o NaN
+  function parseMonto(s) {
+    s = String(s || '').replace(/\s+/g, '');
+    if (/^\d{1,3}(\.\d{3})+(,\d{1,2})?$/.test(s)) s = s.replace(/\./g, '').replace(',', '.');
+    else if (/^\d+([.,]\d{1,2})?$/.test(s)) s = s.replace(',', '.');
+    else return NaN;
+    var n = Number(s);
+    return isFinite(n) && n < 1e9 ? Math.round(n * 100) / 100 : NaN;
+  }
+  function saveBudget(remove) {
+    var n = remove ? 0 : parseMonto($('budAmt').value);
+    if (!remove && !(n > 0)) {
+      haptic('not', 'error');
+      var info = $('budInfo'); info.textContent = 'Escribe un monto mayor que 0 (ej.: 10.000 o 1500,50).'; info.classList.add('err');
+      return;
+    }
+    send({ v: 1, op: 'budget', cat: st.budCat, mon: st.budMon, monto: n }, 'budOut', 'budJson');
+  }
+
   function showDetail(i) {
     st.view = 'detail';
     st.sel = i;
@@ -540,6 +680,7 @@ pre{background:var(--bg2);border-radius:10px;padding:10px;white-space:pre-wrap;w
   }
   function back() {
     if (st.view === 'detail') { haptic('sel'); showList(); }
+    else if (st.view === 'budgetEdit') { haptic('sel'); showBudgets(); }
     else if (st.view === 'flow' && st.step > 1) { haptic('sel'); go(st.step - 1); }
     else if (st.view === 'flow' && st.editId) { haptic('sel'); var i = st.sel; st = fresh(); st.mon = defaultMon; renderSegs(); showDetail(i); }
   }
@@ -577,8 +718,23 @@ pre{background:var(--bg2);border-radius:10px;padding:10px;white-space:pre-wrap;w
   $('tabs').addEventListener('click', function (e) {
     var b = e.target.closest('button[data-view]'); if (!b) return;
     haptic('sel');
-    if (b.getAttribute('data-view') === 'list') showList(); else newEntry();
+    var v = b.getAttribute('data-view');
+    if (v === 'list') showList(); else if (v === 'budgets') showBudgets(); else newEntry();
   });
+  $('budList').addEventListener('click', function (e) {
+    var b = e.target.closest('button[data-cat]'); if (!b) return;
+    haptic('sel');
+    showBudgetEdit(b.getAttribute('data-cat'));
+  });
+  $('budMon').addEventListener('click', function (e) {
+    var b = e.target.closest('button[data-mon]'); if (!b) return;
+    haptic('sel');
+    st.budMon = b.getAttribute('data-mon');
+    renderBudgetEdit();
+  });
+  $('budSave').addEventListener('click', function () { saveBudget(false); });
+  $('budDel').addEventListener('click', function () { haptic('imp', 'medium'); saveBudget(true); });
+  $('budAmt').addEventListener('keydown', function (e) { if (e.key === 'Enter') this.blur(); });
   $('list').addEventListener('click', function (e) {
     var b = e.target.closest('button[data-i]'); if (!b) return;
     haptic('sel');
@@ -646,7 +802,6 @@ pre{background:var(--bg2);border-radius:10px;padding:10px;white-space:pre-wrap;w
   $('fbtn').addEventListener('click', next);
 
   // ---- init ----
-  if (recent && recent.items.length) $('tabList').textContent = '📋 Movimientos (' + recent.items.length + ')';
   renderSegs();
   if (inTg) {
     try { wa.ready(); wa.expand(); } catch (e) {}

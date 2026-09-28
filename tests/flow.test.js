@@ -207,9 +207,9 @@ async function shot(page, name) { if (SHOTS) await page.screenshot({ path: path.
       const q = fragment(fixture(hoy)) + '&tgWebAppData=&tgWebAppVersion=7.0&tgWebAppPlatform=android';
       const { ctx, page, errors } = await newPage(browser, base, q, true);
       assert.ok(await page.isVisible('#s1'));                         // arranca en «Nuevo»
-      assert.strictEqual(await page.textContent('#tabList'), '📋 Movimientos (4)');
       await page.click('#tabs button[data-view="list"]');
       assert.ok(await page.isVisible('#sL'));
+      assert.strictEqual(await page.textContent('#steps'), '4');              // cantidad de movimientos
       assert.ok(await page.isHidden('#listEmpty'));
       const items = await page.$$eval('#list .item', (b) => b.map((x) => [x.getAttribute('data-id'), x.querySelector('b').textContent, x.querySelector('small').textContent, x.querySelector('.ia').textContent]));
       assert.deepStrictEqual(items, [
@@ -335,7 +335,7 @@ async function shot(page, name) { if (SHOTS) await page.screenshot({ path: path.
     {
       for (const q of ['', '#m=esto-no-es-json', '#tgWebAppData=&tgWebAppPlatform=android']) {
         const { ctx, page, errors } = await newPage(browser, base, q, true);
-        assert.strictEqual(await page.textContent('#tabList'), '📋 Movimientos');
+        assert.strictEqual(await page.textContent('#tabList'), '📋 Movimientos'); // nombre fijo
         await page.click('#tabs button[data-view="list"]');
         assert.strictEqual(await page.textContent('#listEmpty'), 'Manda /app para cargar tus movimientos.');
         assert.strictEqual(await page.$$eval('#list .item', (b) => b.length), 0);
@@ -361,6 +361,121 @@ async function shot(page, name) { if (SHOTS) await page.screenshot({ path: path.
       assert.deepStrictEqual(ids, ['1205|Venta|+200,75 UYU', '1204|Comida|−1.500,50 CUP', 'wa-77|Otros|−3 CUP', '1190|Almuerzo Con Ana Y Pedro En El Centro De…|−12 USD', '1300|nota ñandú|−5 CUP']);
       assert.deepStrictEqual(errors, []);
       ok('fragmento del bot -> ' + ids.length + ' movimientos');
+      await ctx.close();
+    }
+
+    // 12) Presupuestos desde el fragmento (clave "b"): lista con gastado / presupuesto y nivel
+    const withBudgets = () => {
+      const f = fixture(hoy);
+      f.c.push('Supermercado');
+      f.b = [[0, 0, 10000, 8200], [0, 1, 50, 60], [1, 2, 300, 0], [3, 0, 500, 100]];
+      return fragment(f);
+    };
+    const MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+    {
+      const { ctx, page, errors } = await newPage(browser, base, withBudgets(), true);
+      await page.click('#tabs button[data-view="budgets"]');
+      assert.ok(await page.isVisible('#sB'));
+      assert.strictEqual(await page.textContent('#title'), 'Presupuestos');
+      assert.ok((await page.textContent('#budNote')).startsWith('Gastado en ' + MESES[+hoy.slice(5, 7) - 1] + ' ' + hoy.slice(0, 4)));
+      const rows = await page.$$eval('#budList .item', (b) => b.map((x) => [x.getAttribute('data-cat'), x.querySelector('small').textContent, x.querySelector('.lv').textContent]));
+      assert.strictEqual(rows.length, 12);                               // 11 categorías de gasto + la propia
+      assert.deepStrictEqual(rows[0], ['Comida', '8.200 / 10.000 CUP · 60 / 50 USD', '🚨 120%']);
+      assert.deepStrictEqual(rows[1], ['Transporte', '0 / 300 UYU', '✅ 0%']);
+      assert.deepStrictEqual(rows[2], ['Vivienda', 'Sin presupuesto', '＋']);
+      assert.deepStrictEqual(rows[11], ['Supermercado', '100 / 500 CUP', '✅ 20%']);
+      let s = await tg(page); assert.strictEqual(s.main.visible, false); assert.strictEqual(s.back.visible, false);
+      await shot(page, '12-presupuestos.png');
+
+      // cambiar Comida CUP
+      await page.click('#budList .item[data-cat="Comida"]');
+      assert.ok(await page.isVisible('#sBE'));
+      assert.ok(await page.isHidden('#tabs'));
+      assert.strictEqual(await page.textContent('#title'), 'Comida');
+      assert.strictEqual(await page.getAttribute('#budMon button.on', 'data-mon'), 'CUP');
+      assert.strictEqual(await page.inputValue('#budAmt'), '10.000');
+      assert.strictEqual(await page.textContent('#budInfo'), 'Gastado este mes: 8.200 CUP de 10.000 (82%).');
+      assert.ok(await page.isVisible('#budDel'));
+      s = await tg(page); assert.strictEqual(s.back.visible, true);
+      await shot(page, '13-presupuesto-editar.png');
+      await page.fill('#budAmt', '12.000');
+      await page.click('#budSave');
+      s = await tg(page);
+      assert.deepStrictEqual(s.sent, ['{"v":1,"op":"budget","cat":"Comida","mon":"CUP","monto":12000}']);
+      assert.deepStrictEqual(errors, []);
+      ok('presupuestos desde el fragmento + cambiar -> ' + s.sent[0]);
+      await ctx.close();
+    }
+
+    // 13) Poner uno nuevo (otra moneda), monto inválido no envía; quitar envía monto 0; atrás vuelve a la lista
+    {
+      const { ctx, page, errors } = await newPage(browser, base, withBudgets(), true);
+      await page.click('#tabs button[data-view="budgets"]');
+      await page.click('#budList .item[data-cat="Vivienda"]');
+      await page.click('#budMon button[data-mon="USD"]');
+      assert.strictEqual(await page.inputValue('#budAmt'), '');
+      assert.ok(await page.isHidden('#budDel'));
+      assert.strictEqual(await page.textContent('#budSave'), 'Poner presupuesto');
+      for (const bad of ['', 'abc', '0', '1,234', '-5']) {
+        await page.fill('#budAmt', bad);
+        await page.click('#budSave');
+        assert.ok((await page.getAttribute('#budInfo', 'class')).includes('err'), bad);
+      }
+      assert.deepStrictEqual((await tg(page)).sent, []);
+      await page.fill('#budAmt', '1.500,5');
+      await page.click('#budSave');
+      assert.deepStrictEqual((await tg(page)).sent, ['{"v":1,"op":"budget","cat":"Vivienda","mon":"USD","monto":1500.5}']);
+      ok('poner presupuesto -> ' + (await tg(page)).sent[0]);
+      await ctx.close();
+
+      const p2 = await newPage(browser, base, withBudgets(), true);
+      await p2.page.click('#tabs button[data-view="budgets"]');
+      await p2.page.click('#budList .item[data-cat="Comida"]');
+      await p2.page.click('#budMon button[data-mon="USD"]');
+      assert.strictEqual(await p2.page.inputValue('#budAmt'), '50');
+      assert.strictEqual(await p2.page.textContent('#budInfo'), 'Gastado este mes: 60 USD de 50 (120%).');
+      await p2.page.evaluate(() => window.__tg.back.cb());              // atrás: lista, sin enviar
+      assert.ok(await p2.page.isVisible('#sB'));
+      await p2.page.click('#budList .item[data-cat="Comida"]');
+      await p2.page.click('#budMon button[data-mon="USD"]');
+      await p2.page.click('#budDel');
+      const s = await tg(p2.page);
+      assert.deepStrictEqual(s.sent, ['{"v":1,"op":"budget","cat":"Comida","mon":"USD","monto":0}']);
+      assert.deepStrictEqual(errors.concat(p2.errors), []);
+      ok('quitar presupuesto -> ' + s.sent[0]);
+      await p2.ctx.close();
+    }
+
+    // 14) Sin fragmento: aviso, todas las categorías sin presupuesto y se puede poner uno (fuera de Telegram, JSON)
+    {
+      const { ctx, page, errors } = await newPage(browser, base, '', false);
+      await page.click('#tabs button[data-view="budgets"]');
+      assert.ok((await page.textContent('#budNote')).startsWith('Manda /app para ver tus presupuestos'));
+      const rows = await page.$$eval('#budList .item small', (b) => b.map((x) => x.textContent));
+      assert.strictEqual(rows.length, 11);
+      assert.ok(rows.every((r) => r === 'Sin presupuesto'));
+      await page.click('#budList .item[data-cat="Comida"]');
+      assert.strictEqual(await page.textContent('#budInfo'), 'Sin datos del mes (manda /app para verlos).');
+      await page.fill('#budAmt', '5000');
+      await page.click('#budSave');
+      assert.strictEqual(await page.textContent('#budJson'), '{"v":1,"op":"budget","cat":"Comida","mon":"CUP","monto":5000}');
+      await page.click('#back');
+      assert.ok(await page.isVisible('#sB'));
+      assert.deepStrictEqual(errors, []);
+      ok('presupuestos sin fragmento -> aviso y alta posible');
+      await ctx.close();
+    }
+
+    // 15) Fragmento con presupuestos generado por el bot (PHP)
+    {
+      const botUrl = 'https://mrf3lipe.github.io/gastos-miniapp/?v=4#m=eyJ2IjoxLCJ0IjoxNzkwNjE3NTAwLCJkIjoiMjAyNi0wOS0yOCIsImMiOlsiQ29taWRhIiwiU3VtaW5pc3Ryb3MgKGx1eiwgYWd1YSwgZ2FzLCBldGMuKSJdLCJhIjpbIkVmZWN0aXZvIl0sIm0iOltbNzcsMCw4MjAwLDAsMCwwLDAsIlBhbiJdXSwiYiI6W1swLDAsMTAwMDAsODIwMF0sWzEsMSw0MC41LDQ1LjI1XV19'; // php: WebAppData::url(...) con 2 presupuestos
+      const { ctx, page, errors } = await newPage(browser, base, botUrl.slice(botUrl.indexOf('#')), true);
+      await page.click('#tabs button[data-view="budgets"]');
+      const rows = await page.$$eval('#budList .item', (b) => b.map((x) => x.getAttribute('data-cat') + '|' + x.querySelector('small').textContent + '|' + x.querySelector('.lv').textContent));
+      assert.ok(rows.includes('Comida|8.200 / 10.000 CUP|⚠️ 82%'), rows.join('\n'));
+      assert.ok(rows.includes('Suministros (luz, agua, gas, etc.)|45,25 / 40,50 USD|🚨 111%'), rows.join('\n'));
+      assert.deepStrictEqual(errors, []);
+      ok('presupuestos del bot -> ' + rows.filter((r) => !r.includes('Sin presupuesto')).length + ' con presupuesto');
       await ctx.close();
     }
 
