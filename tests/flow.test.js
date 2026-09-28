@@ -100,7 +100,7 @@ async function shot(page, name) { if (SHOTS) await page.screenshot({ path: path.
       await shot(page, '4-confirmar.png');
       await mainClick(page);
       s = await tg(page);
-      const expected = '{"v":1,"t":"g","monto":1500.5,"mon":"USD","cat":"Comida","cuenta":"Efectivo","fecha":"' + hoy + '","nota":""}';
+      const expected = '{"v":1,"t":"g","monto":1500.5,"mon":"USD","cat":"Comida","cuenta":"Efectivo","fecha":"hoy","nota":""}';
       assert.deepStrictEqual(s.sent, [expected]);
       assert.ok(s.haptics > 0);
       assert.deepStrictEqual(errors, []);
@@ -125,7 +125,7 @@ async function shot(page, name) { if (SHOTS) await page.screenshot({ path: path.
       await mainClick(page);
       await mainClick(page);
       const s = await tg(page);
-      const expected = '{"v":1,"t":"i","monto":200,"mon":"CUP","cat":"Sueldo","cuenta":"Efectivo","fecha":"' + hoy + '","nota":""}';
+      const expected = '{"v":1,"t":"i","monto":200,"mon":"CUP","cat":"Sueldo","cuenta":"Efectivo","fecha":"hoy","nota":""}';
       assert.deepStrictEqual(s.sent, [expected]);
       assert.deepStrictEqual(errors, []);
       ok('ingreso -> ' + s.sent[0]);
@@ -143,7 +143,7 @@ async function shot(page, name) { if (SHOTS) await page.screenshot({ path: path.
       await page.fill('#nota', '  taxi   al trabajo ');
       await mainClick(page); await mainClick(page);
       const s = await tg(page);
-      assert.deepStrictEqual(JSON.parse(s.sent[0]), { v: 1, t: 'g', monto: 7.25, mon: 'CUP', cat: 'Transporte', cuenta: 'Banco', fecha: ymdInTz(-1), nota: 'taxi al trabajo' });
+      assert.deepStrictEqual(JSON.parse(s.sent[0]), { v: 1, t: 'g', monto: 7.25, mon: 'CUP', cat: 'Transporte', cuenta: 'Banco', fecha: 'ayer', nota: 'taxi al trabajo' });
       ok('ayer/banco/nota -> ' + s.sent[0]);
       await ctx.close();
     }
@@ -164,7 +164,7 @@ async function shot(page, name) { if (SHOTS) await page.screenshot({ path: path.
       await page.click('#fbtn');
       await page.click('#fbtn');
       const json = await page.textContent('#json');
-      assert.strictEqual(json, '{"v":1,"t":"g","monto":42,"mon":"USD","cat":"Otros","cuenta":"Efectivo","fecha":"' + hoy + '","nota":""}');
+      assert.strictEqual(json, '{"v":1,"t":"g","monto":42,"mon":"USD","cat":"Otros","cuenta":"Efectivo","fecha":"hoy","nota":""}');
       assert.deepStrictEqual(errors, []);
       await shot(page, '6-fuera-de-telegram-json.png');
       ok('navegador (sin Telegram) -> ' + json);

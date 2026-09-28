@@ -207,7 +207,8 @@ pre{background:var(--bg2);border-radius:10px;padding:10px;white-space:pre-wrap;w
       mon: st.mon,
       cat: st.cat || 'Otros',
       cuenta: st.cuenta,
-      fecha: fecha(),
+      // hoy/ayer los resuelve el bot con su reloj: no depende de la fecha del teléfono
+      fecha: st.fechaMode === 'otra' ? fecha() : st.fechaMode,
       nota: cleanText(st.nota, 100)
     };
   }
@@ -263,7 +264,7 @@ pre{background:var(--bg2);border-radius:10px;padding:10px;white-space:pre-wrap;w
       ['Monto', fmtMonto(p.monto) + ' ' + p.mon],
       ['Categoría', p.cat],
       ['Cuenta', p.cuenta],
-      ['Fecha', fmtFecha(p.fecha)]
+      ['Fecha', fmtFecha(fecha())]
     ];
     if (p.nota) rows.push(['Nota', p.nota]);
     var el = $('sum');
