@@ -101,6 +101,40 @@ input.bigin{font-size:24px;font-weight:700;text-align:center}
 .confirm p{margin:0 0 4px;font-weight:600;text-align:center}
 .two{display:flex;gap:8px}
 .two .fbtn{margin-top:10px}
+#gMon{flex-wrap:nowrap;gap:6px}
+#gMon .chip{padding:7px 11px;font-size:14px;white-space:nowrap}
+.pie{position:relative;width:min(220px,62vw);margin:4px auto 10px}
+.pie svg{display:block;width:100%;height:auto}
+.pieC{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;pointer-events:none;text-align:center}
+.pieC b{font-size:18px;line-height:1.2;max-width:60%;word-break:break-all}
+.pieC small{color:var(--hint);font-size:12px}
+.legend{display:flex;flex-direction:column;gap:2px}
+.lg{display:flex;align-items:center;gap:8px;padding:6px 2px;border-bottom:1px solid rgba(128,128,128,.15);font-size:14px}
+.lg:last-child{border-bottom:0}
+.lg i{width:12px;height:12px;border-radius:3px;flex:none}
+.lg .ln{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lg .lv2{font-weight:600;white-space:nowrap}
+.lg .lp{color:var(--hint);width:44px;text-align:right;white-space:nowrap;font-size:13px}
+#gBars{display:block;width:100%;height:auto}
+#gBars .bg{fill:var(--danger)}
+#gBars .bi{fill:var(--ok)}
+#gBars .gl{stroke:var(--hint);stroke-opacity:.3;stroke-width:1}
+#gBars text{fill:var(--hint);font-size:11px;font-family:inherit}
+#gBars text.cur{fill:var(--text);font-weight:700}
+.bkey{display:flex;gap:16px;justify-content:center;color:var(--hint);font-size:13px;margin:4px 0 8px}
+.bkey i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:5px;vertical-align:-1px}
+.bkey .kg{background:var(--danger)}
+.bkey .ki{background:var(--ok)}
+.gtbl{background:var(--bg2);border-radius:12px;padding:2px 12px;font-size:13px}
+.gtbl .tr{display:flex;gap:8px;padding:6px 0;border-bottom:1px solid rgba(128,128,128,.15)}
+.gtbl .tr:last-child{border-bottom:0}
+.gtbl .tr span{flex:1;text-align:right;white-space:nowrap}
+.gtbl .tr span:first-child{text-align:left;color:var(--hint);flex:.8}
+.gtbl .tr .g{color:var(--danger)}
+.gtbl .tr .i{color:var(--ok)}
+.gtbl .tr .z{color:var(--hint)}
+.gtbl .th span{color:var(--hint)!important;font-size:12px}
+@media (max-width:440px){.tabs .tl[data-s]{font-size:0}.tabs .tl[data-s]::after{content:attr(data-s);font-size:12px}}
 .hidden{display:none!important}
 </style>
 </head>
@@ -110,9 +144,10 @@ input.bigin{font-size:24px;font-weight:700;text-align:center}
   <p id="bal" class="hidden"></p>
   <div class="seg tabs" id="tabs">
     <button type="button" data-view="new" class="on"><span class="te">➕</span><span class="tl">Nuevo</span></button>
-    <button type="button" data-view="list" id="tabList"><span class="te">📋</span><span class="tl">Movimientos</span></button>
-    <button type="button" data-view="budgets" id="tabBud"><span class="te">🎯</span><span class="tl">Presupuestos</span></button>
+    <button type="button" data-view="list" id="tabList"><span class="te">📋</span><span class="tl" data-s="Movim.">Movimientos</span></button>
+    <button type="button" data-view="budgets" id="tabBud"><span class="te">🎯</span><span class="tl" data-s="Presup.">Presupuestos</span></button>
     <button type="button" data-view="fixed" id="tabFix"><span class="te">📌</span><span class="tl">Fijos</span></button>
+    <button type="button" data-view="charts" id="tabCh"><span class="te">📊</span><span class="tl">Gráficos</span></button>
   </div>
   <div class="top">
     <button id="back" class="back hidden" type="button">‹ Atrás</button>
@@ -276,6 +311,26 @@ input.bigin{font-size:24px;font-weight:700;text-align:center}
     </div>
   </section>
 
+  <!-- gráficos: torta de gastos del mes por categoría y barras de los últimos 6 meses (datos del fragmento) -->
+  <section class="screen" id="sG">
+    <div class="chips" id="gMon"></div>
+    <p id="gEmpty" class="empty hidden">Sin datos todavía</p>
+    <div id="gBody">
+      <p class="sect" id="gPieT">Gastos del mes</p>
+      <p id="gPieEmpty" class="hint hidden">Sin gastos este mes.</p>
+      <div class="pie" id="gPieBox">
+        <svg id="gPie" viewBox="0 0 200 200" role="img" aria-label="Gastos del mes por categoría"></svg>
+        <div class="pieC"><b id="gPieTot"></b><small id="gPieCur"></small></div>
+      </div>
+      <div class="legend" id="gLeg"></div>
+      <p class="sect">Gastos e ingresos · últimos 6 meses</p>
+      <svg id="gBars" viewBox="0 0 320 170" role="img" aria-label="Gastos e ingresos por mes"></svg>
+      <div class="bkey"><span><i class="kg"></i>Gastos</span><span><i class="ki"></i>Ingresos</span></div>
+      <div class="gtbl" id="gTbl"></div>
+      <p id="gNote" class="hint"></p>
+    </div>
+  </section>
+
   <button id="fbtn" class="fbtn hidden" type="button">Siguiente</button>
 </div>
 
@@ -297,7 +352,9 @@ input.bigin{font-size:24px;font-weight:700;text-align:center}
   var CUENTAS = ['Efectivo', 'Banco', 'PayPal'];
   var TITLES = ['', 'Nuevo movimiento', 'Categoría', 'Detalles', 'Confirmar'];
   var MAX_INT_DIGITS = 9;
-  var SCREENS = ['s1', 's2', 's3', 's4', 'sL', 'sD', 'sB', 'sBE', 'sF', 'sFE', 'sR'];
+  var SCREENS = ['s1', 's2', 's3', 's4', 'sL', 'sD', 'sB', 'sBE', 'sF', 'sFE', 'sR', 'sG'];
+  var TOTAL = 'TOTAL'; // opción «Total en CUP» del selector de gráficos
+  var PALETTE = ['#4e79a7', '#f28e2b', '#e15759', '#76b7b2', '#59a14f', '#edc948', '#b07aa1', '#ff9da7', '#9c755f', '#86bcb6', '#d37295', '#bab0ac'];
   var RATE_CURS = ['USD', 'UYU']; // Rates::CURRENCIES del bot
   var FX_NOTE_MAX = 30; // FixedEntries::NOTE_MAX del bot
   var MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
@@ -311,7 +368,7 @@ input.bigin{font-size:24px;font-weight:700;text-align:center}
 
   function fresh() {
     return { view: 'flow', step: 1, t: 'g', amt: '', mon: 'CUP', cat: null, cuenta: 'Efectivo', fechaMode: 'hoy', fechaOtra: '', nota: '',
-      editId: null, notaOrig: '', cut: false, sel: -1, budCat: null, budMon: 'CUP', fx: null, rateMon: null };
+      editId: null, notaOrig: '', cut: false, sel: -1, budCat: null, budMon: 'CUP', fx: null, rateMon: null, gMon: null };
   }
   var st = fresh();
 
@@ -364,7 +421,9 @@ input.bigin{font-size:24px;font-weight:700;text-align:center}
   // {"v":1,"t":unix,"d":"YYYY-MM-DD","c":[cats],"a":[cuentas],"m":[[id,tipo,monto,monIdx,catIdx,cuentaIdx,díasAntes(,nota(,1))]],
   //  "b":[[catIdx,monIdx,presupuesto,gastadoDelMes]],  ("b" solo si hay presupuestos)
   //  "f":[[id,tipo,monto,monIdx,catIdx,cuentaIdx,día,activo(,nota)]],  ("f" solo si hay fijos)
-  //  "r":[[monIdx,tasa,díasAntes|null]]}  (tasas a CUP, "r" solo si hay)
+  //  "r":[[monIdx,tasa,díasAntes|null]],  (tasas a CUP, "r" solo si hay)
+  //  "p":[[monIdx,catIdx,monto,catIdx,monto,...]],  (torta: gastos del mes de "d" por categoría)
+  //  "h":[[monIdx,g1..g6,i1..i6]]}  (barras: gastos/ingresos de los 6 meses que terminan en el de "d", del más viejo al actual)
   // Telegram añade sus parámetros al mismo fragmento (#m=...&tgWebAppData=...), por eso se busca "m=".
   function b64urlDecode(s) {
     s = s.replace(/-/g, '+').replace(/_/g, '/');
@@ -417,7 +476,23 @@ input.bigin{font-size:24px;font-weight:700;text-align:center}
         if (RATE_CURS.indexOf(mon) < 0 || typeof r[1] !== 'number' || !(r[1] > 0)) return;
         rates[mon] = { tasa: r[1], fecha: typeof r[2] === 'number' ? daysBefore(d.d, r[2]) : '' };
       });
-      return { at: typeof d.t === 'number' ? d.t : 0, d: d.d, items: items, budgets: budgets, fixed: fixed, rates: rates };
+      var pie = {}, bars = {};
+      (Array.isArray(d.p) ? d.p : []).forEach(function (r) {
+        if (!Array.isArray(r)) return;
+        var mon = CURRENCIES[r[0]];
+        if (!mon) return;
+        for (var k = 1; k + 1 < r.length; k += 2) {
+          var cat = d.c[r[k]];
+          if (typeof cat !== 'string' || typeof r[k + 1] !== 'number' || !(r[k + 1] > 0)) continue;
+          (pie[mon] = pie[mon] || []).push({ cat: cat, v: r[k + 1] });
+        }
+      });
+      (Array.isArray(d.h) ? d.h : []).forEach(function (r) {
+        if (!Array.isArray(r) || r.length !== 13 || !CURRENCIES[r[0]]) return;
+        var nums = r.slice(1).map(function (x) { return typeof x === 'number' && isFinite(x) ? Math.max(0, x) : 0; });
+        bars[CURRENCIES[r[0]]] = { g: nums.slice(0, 6), i: nums.slice(6) };
+      });
+      return { at: typeof d.t === 'number' ? d.t : 0, d: d.d, items: items, budgets: budgets, fixed: fixed, rates: rates, pie: pie, bars: bars };
     } catch (e) { return null; }
   }
   var recent = readRecent();
@@ -597,9 +672,10 @@ input.bigin{font-size:24px;font-weight:700;text-align:center}
     var backSupported = inTg && wa.BackButton && (!wa.isVersionAtLeast || wa.isVersionAtLeast('6.1'));
     $('back').classList.toggle('hidden', backSupported || !canGoBack());
     // pestañas: solo al empezar un alta o en la lista
-    var tabsOn = st.view === 'list' || st.view === 'budgets' || st.view === 'fixed' || (st.view === 'flow' && st.step === 1 && !st.editId);
+    var tabView = st.view === 'list' || st.view === 'budgets' || st.view === 'fixed' || st.view === 'charts';
+    var tabsOn = tabView || (st.view === 'flow' && st.step === 1 && !st.editId);
     $('tabs').classList.toggle('hidden', !tabsOn);
-    var tab = st.view === 'list' || st.view === 'budgets' || st.view === 'fixed' ? st.view : 'new';
+    var tab = tabView ? st.view : 'new';
     Array.prototype.forEach.call($('tabs').children, function (c) { c.classList.toggle('on', c.getAttribute('data-view') === tab); });
   }
   function showScreen(id, title, steps) {
@@ -792,6 +868,165 @@ input.bigin{font-size:24px;font-weight:700;text-align:center}
   }
 
   // ---- fijos ----
+  // ---- gráficos (SVG propio, sin librerías) ----
+  var SVGNS = 'http://www.w3.org/2000/svg';
+  function svgEl(tag, attrs) {
+    var e = document.createElementNS(SVGNS, tag);
+    for (var k in attrs) if (Object.prototype.hasOwnProperty.call(attrs, k)) e.setAttribute(k, attrs[k]);
+    return e;
+  }
+  function chartMonths() {
+    var p = recent.d.split('-'), out = [];
+    for (var k = 5; k >= 0; k--) {
+      var dt = new Date(+p[0], +p[1] - 1 - k, 1);
+      out.push({ y: dt.getFullYear(), m: dt.getMonth() });
+    }
+    return out;
+  }
+  function hasChartData(mon) { return !!(recent && ((recent.pie[mon] && recent.pie[mon].length) || recent.bars[mon])); }
+  function hasAnyRate() { return !!(recent && RATE_CURS.some(function (m) { return !!recent.rates[m]; })); }
+  function chartOptions() { return hasAnyRate() ? CURRENCIES.concat([TOTAL]) : CURRENCIES.slice(); }
+  // {pie:[{cat,v}] (mayor primero), g:[6], i:[6], cur, missing:[monedas sin tasa], has}
+  function chartData(sel) {
+    var monList = sel === TOTAL ? CURRENCIES : [sel], merged = {}, order = [], g = [0, 0, 0, 0, 0, 0], inc = [0, 0, 0, 0, 0, 0], missing = [], used = [], has = false;
+    monList.forEach(function (mon) {
+      if (!hasChartData(mon)) return;
+      var rate = mon === 'CUP' || sel !== TOTAL ? 1 : (rateOf(mon) ? rateOf(mon).tasa : 0);
+      if (!rate) { missing.push(mon); return; }
+      has = true;
+      if (mon !== 'CUP' && sel === TOTAL) used.push(mon);
+      (recent.pie[mon] || []).forEach(function (x) {
+        var k = x.cat.toLowerCase();
+        if (!merged[k]) { merged[k] = { cat: x.cat, v: 0 }; order.push(k); }
+        merged[k].v += x.v * rate;
+      });
+      var b = recent.bars[mon];
+      if (b) for (var j = 0; j < 6; j++) { g[j] += b.g[j] * rate; inc[j] += b.i[j] * rate; }
+    });
+    var round = function (v) { return sel === TOTAL ? Math.round(v) : Math.round(v * 100) / 100; };
+    var pie = order.map(function (k) { return { cat: merged[k].cat, v: round(merged[k].v) }; }).filter(function (x) { return x.v > 0; });
+    pie.sort(function (a, b) { return b.v - a.v || (a.cat < b.cat ? -1 : 1); });
+    return { pie: pie, g: g.map(round), i: inc.map(round), cur: sel === TOTAL ? 'CUP' : sel, missing: missing, used: used, has: has };
+  }
+  function fmtShort(n) {
+    if (n >= 1e6) return (Math.round(n / 1e5) / 10).toString().replace('.', ',') + ' M';
+    if (n >= 1e4) return Math.round(n / 1e3) + ' mil';
+    return fmtMonto(Math.round(n));
+  }
+  function niceMax(v) {
+    if (!(v > 0)) return 1;
+    var p = Math.pow(10, Math.floor(Math.log10(v))), steps = [1, 2, 2.5, 5, 10];
+    for (var k = 0; k < steps.length; k++) if (steps[k] * p >= v) return steps[k] * p;
+    return 10 * p;
+  }
+  function pctLabel(v, total) {
+    var p = v * 100 / total;
+    return p > 0 && p < 1 ? '<1%' : Math.round(p) + '%';
+  }
+  function drawPie(data) {
+    var svg = $('gPie'), leg = $('gLeg'), total = 0;
+    svg.textContent = ''; leg.textContent = '';
+    data.pie.forEach(function (x) { total += x.v; });
+    $('gPieEmpty').classList.toggle('hidden', data.pie.length > 0);
+    $('gPieBox').classList.toggle('hidden', !data.pie.length);
+    if (!data.pie.length) return;
+    var r = 70, C = 2 * Math.PI * r, off = 0;
+    svg.appendChild(svgEl('circle', { cx: 100, cy: 100, r: r, fill: 'none', stroke: 'rgba(128,128,128,.15)', 'stroke-width': 34 }));
+    data.pie.forEach(function (x, idx) {
+      var len = x.v / total * C, color = PALETTE[idx % PALETTE.length];
+      var c = svgEl('circle', { cx: 100, cy: 100, r: r, fill: 'none', stroke: color, 'stroke-width': 34,
+        'stroke-dasharray': len.toFixed(3) + ' ' + (C - len + 0.001).toFixed(3), 'stroke-dashoffset': (-off).toFixed(3),
+        transform: 'rotate(-90 100 100)', 'data-cat': x.cat, 'data-v': String(x.v) });
+      var t = svgEl('title', {}); t.textContent = x.cat + ': ' + fmtMonto(x.v) + ' ' + data.cur; c.appendChild(t);
+      svg.appendChild(c);
+      off += len;
+      var row = document.createElement('div'); row.className = 'lg'; row.setAttribute('data-cat', x.cat);
+      var sw = document.createElement('i'); sw.style.background = color;
+      var ln = document.createElement('span'); ln.className = 'ln'; ln.textContent = (EMOJI[x.cat] ? EMOJI[x.cat] + ' ' : '') + x.cat;
+      var lv = document.createElement('span'); lv.className = 'lv2'; lv.textContent = fmtMonto(x.v) + ' ' + data.cur;
+      var lp = document.createElement('span'); lp.className = 'lp'; lp.textContent = pctLabel(x.v, total);
+      row.appendChild(sw); row.appendChild(ln); row.appendChild(lv); row.appendChild(lp);
+      leg.appendChild(row);
+    });
+    $('gPieTot').textContent = fmtMonto(Math.round(total * 100) / 100);
+    $('gPieCur').textContent = data.cur;
+  }
+  function drawBars(data) {
+    var svg = $('gBars'), months = chartMonths(), max = 0;
+    svg.textContent = '';
+    data.g.concat(data.i).forEach(function (v) { if (v > max) max = v; });
+    var top = niceMax(max), L = 44, R = 316, T = 8, B = 146, H = B - T, gw = (R - L) / 6, bw = Math.min(16, gw / 2 - 4);
+    [0, 0.5, 1].forEach(function (f) {
+      var y = B - f * H;
+      svg.appendChild(svgEl('line', { x1: L, x2: R, y1: y, y2: y, 'class': 'gl' }));
+      var t = svgEl('text', { x: L - 6, y: y + 4, 'text-anchor': 'end' }); t.textContent = fmtShort(top * f); svg.appendChild(t);
+    });
+    months.forEach(function (mo, j) {
+      var cx = L + gw * j + gw / 2;
+      [['g', data.g[j], cx - bw - 1], ['i', data.i[j], cx + 1]].forEach(function (b) {
+        var h = b[1] > 0 ? Math.max(1, b[1] / top * H) : 0;
+        var rect = svgEl('rect', { x: b[2].toFixed(2), y: (B - h).toFixed(2), width: bw.toFixed(2), height: h.toFixed(2), rx: 2,
+          'class': b[0] === 'g' ? 'bg' : 'bi', 'data-m': mo.y + '-' + pad2(mo.m + 1), 'data-v': String(b[1]) });
+        var tt = svgEl('title', {}); tt.textContent = (b[0] === 'g' ? 'Gastos ' : 'Ingresos ') + MESES[mo.m] + ': ' + fmtMonto(b[1]) + ' ' + data.cur;
+        rect.appendChild(tt);
+        svg.appendChild(rect);
+      });
+      var lbl = svgEl('text', { x: cx, y: B + 16, 'text-anchor': 'middle', 'class': j === 5 ? 'cur' : '' });
+      lbl.textContent = MESES[mo.m].slice(0, 3);
+      svg.appendChild(lbl);
+    });
+    var tbl = $('gTbl');
+    tbl.textContent = '';
+    var head = document.createElement('div'); head.className = 'tr th';
+    ['Mes', 'Gastos', 'Ingresos'].forEach(function (h) { var sp = document.createElement('span'); sp.textContent = h; head.appendChild(sp); });
+    tbl.appendChild(head);
+    months.slice().reverse().forEach(function (mo, jr) {
+      var j = 5 - jr, tr = document.createElement('div'); tr.className = 'tr'; tr.setAttribute('data-m', mo.y + '-' + pad2(mo.m + 1));
+      [[MESES[mo.m].slice(0, 3) + ' ' + String(mo.y).slice(2), ''], [fmtMonto(data.g[j]), data.g[j] > 0 ? 'g' : 'z'], [fmtMonto(data.i[j]), data.i[j] > 0 ? 'i' : 'z']].forEach(function (c) {
+        var sp = document.createElement('span'); sp.textContent = c[0]; if (c[1]) sp.className = c[1]; tr.appendChild(sp);
+      });
+      tbl.appendChild(tr);
+    });
+  }
+  function renderCharts() {
+    var opts = chartOptions();
+    if (!recent) {
+      $('gMon').classList.add('hidden'); $('gBody').classList.add('hidden');
+      $('gEmpty').textContent = 'Sin datos todavía. Manda /app para cargarlos.'; $('gEmpty').classList.remove('hidden');
+      return;
+    }
+    if (!st.gMon || opts.indexOf(st.gMon) < 0) {
+      st.gMon = CURRENCIES.filter(hasChartData)[0] || 'CUP';
+    }
+    $('gMon').classList.remove('hidden');
+    chipList($('gMon'), opts, st.gMon, 'data-gmon');
+    Array.prototype.forEach.call($('gMon').children, function (c) { if (c.getAttribute('data-gmon') === TOTAL) c.textContent = 'Total en CUP'; });
+    var data = chartData(st.gMon);
+    var p = recent.d.split('-');
+    $('gPieT').textContent = 'Gastos de ' + MESES[+p[1] - 1] + ' ' + p[0] + ' por categoría';
+    var notes = [];
+    if (st.gMon === TOTAL) {
+      if (data.used.length) notes.push('≈ Con tasas: ' + data.used.map(function (m) { return '1 ' + m + ' = ' + fmtRate(rateOf(m).tasa) + ' CUP'; }).join(' · ') + '. Solo para mostrar.');
+      data.missing.forEach(function (m) { notes.push('⚠️ Sin tasa de ' + m + ', no incluido.'); });
+    }
+    if (!data.has) {
+      $('gBody').classList.add('hidden');
+      $('gEmpty').textContent = 'Sin datos todavía' + (st.gMon === TOTAL ? '' : ' en ' + st.gMon) + '.' + (notes.length ? ' ' + notes.join(' ') : '');
+      $('gEmpty').classList.remove('hidden');
+      return;
+    }
+    $('gEmpty').classList.add('hidden'); $('gBody').classList.remove('hidden');
+    drawPie(data);
+    drawBars(data);
+    $('gNote').textContent = notes.join(' ');
+    $('gNote').classList.toggle('hidden', !notes.length);
+  }
+  function showCharts() {
+    if (st.editId) { st = fresh(); st.mon = defaultMon; renderSegs(); }
+    st.view = 'charts';
+    renderCharts();
+    showScreen('sG', 'Gráficos', '');
+  }
   function fxTitle(f) { return f.nota || f.cat; }
   function renderFixed() {
     var note = $('fxNote'), el = $('fxList');
@@ -974,7 +1209,13 @@ input.bigin{font-size:24px;font-weight:700;text-align:center}
     var b = e.target.closest('button[data-view]'); if (!b) return;
     haptic('sel');
     var v = b.getAttribute('data-view');
-    if (v === 'list') showList(); else if (v === 'budgets') showBudgets(); else if (v === 'fixed') showFixed(); else newEntry();
+    if (v === 'list') showList(); else if (v === 'budgets') showBudgets(); else if (v === 'fixed') showFixed(); else if (v === 'charts') showCharts(); else newEntry();
+  });
+  $('gMon').addEventListener('click', function (e) {
+    var b = e.target.closest('button[data-gmon]'); if (!b) return;
+    haptic('sel');
+    st.gMon = b.getAttribute('data-gmon');
+    renderCharts();
   });
   $('rateList').addEventListener('click', function (e) {
     var b = e.target.closest('button[data-rate]'); if (!b) return;

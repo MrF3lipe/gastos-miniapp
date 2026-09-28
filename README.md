@@ -23,6 +23,12 @@ Pestaña **Fijos**: gastos/ingresos fijos mensuales (luz, internet, sueldo…) q
 indicado. **➕ Agregar fijo** abre un formulario (tipo, monto, moneda, categoría, cuenta, nota ≤ 30, día 1–31); al tocar
 uno se edita, se pausa/reanuda (Estado) o se quita (con confirmación). Los pausados se ven atenuados.
 
+Pestaña **Gráficos** (SVG propio, sin librerías ni CDN): selector de moneda CUP / USD / UYU y, si hay tasas,
+**Total en CUP** (convierte con las tasas del fragmento; una moneda con datos y sin tasa no se incluye y se avisa).
+Torta (dona) de los gastos del mes por categoría con leyenda, montos y porcentajes; barras de gastos contra ingresos
+de los últimos 6 meses, con una tabla con los valores exactos. Sin agregados muestra «Sin datos todavía». Usa los
+colores del tema de Telegram (claro u oscuro); a ≤ 440 px las pestañas usan nombres cortos (Movim., Presup.).
+
 Parámetros opcionales de URL: `?mon=USD` preselecciona la moneda; `?bal=texto` muestra una línea informativa arriba (solo texto).
 Fuera de Telegram muestra un aviso y, al guardar, el JSON que se enviaría.
 
@@ -51,10 +57,15 @@ monIdx en `CUP, USD, UYU`; díasAntes respecto de `d` (`null` = desconocida); `1
 Si hay presupuestos: `"b":[[catIdx,monIdx,presupuesto,gastadoEnElMesDe_d]]` (nunca se recortan).
 Si hay fijos: `"f":[[id,tipo,monto,monIdx,catIdx,cuentaIdx,día,activo(,nota)]]` (tampoco se recortan).
 Si hay tasas: `"r":[[monIdx,tasa,díasAntesDeLaActualización|null]]` (tampoco se recortan).
+Gráficos (solo para mostrar): `"p":[[monIdx,catIdx,monto,catIdx,monto,…],…]` gastos del mes de `d` por categoría
+(mayor primero) y `"h":[[monIdx,g1..g6,i1..i6],…]` gastos e ingresos de los 6 meses que terminan en el de `d`, del más
+viejo al actual. CUP y UYU en unidades, USD con centavos. Van antes que los movimientos viejos pero después de
+presupuestos, fijos y tasas; si falta lugar la torta se queda con las 5 categorías mayores por moneda (el resto en «Otros»).
 Telegram añade sus parámetros al mismo fragmento (`#m=…&tgWebAppData=…`), por eso se lee solo `m=`.
 
 ## Pruebas
 ```sh
 NODE_PATH=/usr/local/lib/node_modules CHROME_PATH=/usr/bin/google-chrome node tests/flow.test.js
 ```
-Requiere `playwright-core`. `SHOTS_DIR=/ruta` guarda capturas 390x844.
+Requiere `playwright-core`. `SHOTS_DIR=/ruta` guarda capturas 390x844; las de Gráficos (claro/oscuro, 360/390/420 px)
+van siempre a `/workspace/miniapp-shots/fase5-*.png`.

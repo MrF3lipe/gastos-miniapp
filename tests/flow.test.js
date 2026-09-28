@@ -486,7 +486,7 @@ async function shot(page, name) { if (SHOTS) await page.screenshot({ path: path.
       f.f = [['fk3x9', 0, 1500, 0, 3, 0, 5, 1, 'Luz'], ['fk3xa', 1, 20.5, 1, 4, 1, 31, 0], ['fbad', 0, 0, 0, 0, 0, 1, 1], ['123', 0, 5, 0, 0, 0, 1, 1]];
       const { ctx, page, errors } = await newPage(browser, base, fragment(f), true);
       const fits = await page.$$eval('#tabs button', (bs) => bs.map((b) => b.querySelector('.tl').scrollWidth <= b.querySelector('.tl').clientWidth + 1 && b.getBoundingClientRect().width >= 70));
-      assert.deepStrictEqual(fits, [true, true, true, true]);
+      assert.deepStrictEqual(fits, [true, true, true, true, true]);          // 5 pestañas (con Gráficos)
       await page.click('#tabFix');
       assert.strictEqual(await page.textContent('#title'), 'Fijos');
       assert.strictEqual(await page.textContent('#steps'), '2');                 // los 2 inválidos se ignoran
@@ -498,7 +498,7 @@ async function shot(page, name) { if (SHOTS) await page.screenshot({ path: path.
       const s = await tg(page); assert.strictEqual(s.main.visible, false); assert.strictEqual(s.back.visible, false);
       await shot(page, '16-fijos.png');
       assert.deepStrictEqual(errors, []);
-      ok('fijos del fragmento -> 2 en la lista, pausado atenuado, 4 pestañas caben');
+      ok('fijos del fragmento -> 2 en la lista, pausado atenuado, 5 pestañas caben');
 
       // 17) editar: monto, día y pausar -> fijo_edit exacto (por sendData)
       await page.click('#fxList .item[data-id="fk3x9"]');
@@ -668,6 +668,176 @@ async function shot(page, name) { if (SHOTS) await page.screenshot({ path: path.
       assert.ok((await page.textContent('#detSum')).includes('≈ 6.362,75 CUP'));    // 15,50 USD x 410,5
       assert.deepStrictEqual(errors, []);
       ok('tasas del bot -> 2 tasas; quitar -> tasa 0');
+      await ctx.close();
+    }
+
+    // ---- Gráficos ----
+    const CH_URL = 'https://mrf3lipe.github.io/gastos-miniapp/?v=7#m=eyJ2IjoxLCJ0IjoxNzkwNjE2MzAwLCJkIjoiMjAyNi0wOS0yOCIsImMiOlsiQ29taWRhIiwiU3VlbGRvIiwiVHJhbnNwb3J0ZSIsImNvbWlkYSIsIlJlZ2Fsb3MiLCJGcmVlbGFuY2UiLCJWaWFqZXMiXSwiYSI6WyJFZmVjdGl2byJdLCJtIjpbWzcwMSwwLDE1MDAuNSwwLDAsMCwwLCJhbG11ZXJ6byJdLFsxLDEsMjAwMDAsMCwxLDAsMV0sWy0yLDAsMzAwLDAsMiwwLDEsInRheGkiXSxbLTEsMCwxMi4yNSwxLDMsMCwyLCJwaXp6YSJdLFstMSwwLDI1MC42LDIsNCwwLDMsImZsb3JlcyJdLFstNDgsMCw4MDAsMCwwLDAsNDksIngiXSxbLTMwLDEsMTAwLDEsNSwwLDYzLCJ4Il0sWy0yMCwwLDQwLDEsNiwwLDExMCwieCJdXSwiciI6W1sxLDQwMCwxXV0sInAiOltbMCwwLDE1MDEsMiwzMDBdLFsxLDAsMTIuMjVdLFsyLDQsMjUxXV0sImgiOltbMCwwLDAsMCwwLDgwMCwxODAxLDAsMCwwLDAsMCwyMDAwMF0sWzEsMCwwLDQwLDAsMCwxMi4yNSwwLDAsMCwxMDAsMCwwXSxbMiwwLDAsMCwwLDAsMjUxLDAsMCwwLDAsMCwwXV19'; // php /tmp gen: WebAppData::url(...) con Charts::aggregate (CUP, USD, UYU) y tasa USD 400
+    const DARK = `(() => { const v = { 'bg-color': '#17212b', 'secondary-bg-color': '#232e3c', 'text-color': '#f5f5f5', 'hint-color': '#708499',
+      'link-color': '#6ab3f3', 'button-color': '#5288c1', 'button-text-color': '#ffffff', 'destructive-text-color': '#ec3942' };
+      document.addEventListener('DOMContentLoaded', () => { for (const k in v) document.documentElement.style.setProperty('--tg-theme-' + k, v[k]); document.body.style.colorScheme = 'dark'; }); })();`;
+    const OUT = '/workspace/miniapp-shots';
+    fs.mkdirSync(OUT, { recursive: true });
+    const chartState = (page) => page.evaluate(() => ({
+      chips: Array.from(document.querySelectorAll('#gMon .chip')).map((c) => c.textContent + (c.classList.contains('on') ? '*' : '')),
+      pie: Array.from(document.querySelectorAll('#gPie circle[data-cat]')).map((c) => c.getAttribute('data-cat') + '=' + c.getAttribute('data-v')),
+      arcs: Array.from(document.querySelectorAll('#gPie circle[data-cat]')).map((c) => Math.round(parseFloat(c.getAttribute('stroke-dasharray')) * 1000 / (2 * Math.PI * 70)) / 10),
+      legend: Array.from(document.querySelectorAll('#gLeg .lg')).map((r) => Array.from(r.querySelectorAll('span')).map((x) => x.textContent).join('|')),
+      total: document.getElementById('gPieTot').textContent + ' ' + document.getElementById('gPieCur').textContent,
+      g: Array.from(document.querySelectorAll('#gBars rect.bg')).map((r) => +r.getAttribute('data-v')),
+      i: Array.from(document.querySelectorAll('#gBars rect.bi')).map((r) => +r.getAttribute('data-v')),
+      gh: Array.from(document.querySelectorAll('#gBars rect.bg')).map((r) => +r.getAttribute('height')),
+      ih: Array.from(document.querySelectorAll('#gBars rect.bi')).map((r) => +r.getAttribute('height')),
+      months: Array.from(document.querySelectorAll('#gBars text[text-anchor="middle"]')).map((t) => t.textContent),
+      axis: Array.from(document.querySelectorAll('#gBars text[text-anchor="end"]')).map((t) => t.textContent),
+      tbl: Array.from(document.querySelectorAll('#gTbl .tr:not(.th)')).map((r) => Array.from(r.children).map((x) => x.textContent).join('|')),
+      note: document.getElementById('gNote').classList.contains('hidden') ? '' : document.getElementById('gNote').textContent,
+      empty: document.getElementById('gEmpty').classList.contains('hidden') ? '' : document.getElementById('gEmpty').textContent,
+      body: !document.getElementById('gBody').classList.contains('hidden'),
+    }));
+
+    // 25) fragmento del bot (PHP): torta y barras con los valores exactos; cambian con el selector de moneda
+    {
+      const { ctx, page, errors } = await newPage(browser, base, CH_URL.slice(CH_URL.indexOf('#')), true);
+      await page.click('#tabCh');
+      assert.ok(await page.isVisible('#sG'));
+      assert.strictEqual(await page.textContent('#title'), 'Gráficos');
+      assert.strictEqual(await page.textContent('#gPieT'), 'Gastos de septiembre 2026 por categoría');
+      let c = await chartState(page);
+      assert.deepStrictEqual(c.chips, ['CUP*', 'USD', 'UYU', 'Total en CUP']);
+      assert.deepStrictEqual(c.pie, ['Comida=1501', 'Transporte=300']);
+      assert.deepStrictEqual(c.arcs, [83.3, 16.7]);                                   // % de la circunferencia
+      assert.deepStrictEqual(c.legend, ['🍽️ Comida|1.501 CUP|83%', '🚕 Transporte|300 CUP|17%']);
+      assert.strictEqual(c.total, '1.801 CUP');
+      assert.deepStrictEqual(c.months, ['abr', 'may', 'jun', 'jul', 'ago', 'sep']);
+      assert.deepStrictEqual(c.g, [0, 0, 0, 0, 800, 1801]);
+      assert.deepStrictEqual(c.i, [0, 0, 0, 0, 0, 20000]);
+      assert.deepStrictEqual(c.axis, ['0', '10 mil', '20 mil']);                        // escala redonda: 20.000
+      assert.strictEqual(c.ih[5], 138);                                                  // 20.000 = alto completo
+      assert.ok(Math.abs(c.gh[5] - 138 * 1801 / 20000) < 0.01 && Math.abs(c.gh[4] - 138 * 800 / 20000) < 0.01);
+      assert.deepStrictEqual(c.gh.slice(0, 4), [0, 0, 0, 0]);                            // meses sin movimientos
+      assert.deepStrictEqual(c.tbl, ['sep 26|1.801|20.000', 'ago 26|800|0', 'jul 26|0|0', 'jun 26|0|0', 'may 26|0|0', 'abr 26|0|0']);
+      assert.strictEqual(c.note, '');
+      assert.deepStrictEqual(await page.$$eval('#gTbl .tr[data-m="2026-08"] span', (x) => x.map((e) => e.className)), ['', 'g', 'z']);   // ceros en gris
+      const chipsTop = await page.$$eval('#gMon .chip', (x) => new Set(x.map((e) => Math.round(e.getBoundingClientRect().top))).size);
+      assert.strictEqual(chipsTop, 1);                                                   // selector en una sola fila
+      await page.screenshot({ path: path.join(OUT, 'fase5-claro-cup.png'), fullPage: true });
+
+      await page.click('#gMon .chip[data-gmon="USD"]');
+      c = await chartState(page);
+      assert.deepStrictEqual(c.chips, ['CUP', 'USD*', 'UYU', 'Total en CUP']);
+      assert.deepStrictEqual(c.pie, ['Comida=12.25']);
+      assert.deepStrictEqual(c.legend, ['🍽️ Comida|12,25 USD|100%']);
+      assert.deepStrictEqual(c.g, [0, 0, 40, 0, 0, 12.25]);
+      assert.deepStrictEqual(c.i, [0, 0, 0, 100, 0, 0]);
+      assert.deepStrictEqual(c.axis, ['0', '50', '100']);
+      assert.strictEqual(c.tbl[0], 'sep 26|12,25|0');
+
+      await page.click('#gMon .chip[data-gmon="UYU"]');
+      c = await chartState(page);
+      assert.deepStrictEqual([c.pie, c.g, c.i.every((v) => v === 0)], [['Regalos=251'], [0, 0, 0, 0, 0, 251], true]);
+
+      // Total en CUP: USD x 400, UYU sin tasa -> no incluido (se avisa, no se inventa)
+      await page.click('#gMon .chip[data-gmon="TOTAL"]');
+      c = await chartState(page);
+      assert.deepStrictEqual(c.pie, ['Comida=6401', 'Transporte=300']);                // 1.501 + 12,25 x 400
+      assert.deepStrictEqual(c.legend, ['🍽️ Comida|6.401 CUP|96%', '🚕 Transporte|300 CUP|4%']);
+      assert.strictEqual(c.total, '6.701 CUP');
+      assert.deepStrictEqual(c.g, [0, 0, 16000, 0, 800, 6701]);
+      assert.deepStrictEqual(c.i, [0, 0, 0, 40000, 0, 20000]);
+      assert.strictEqual(c.note, '≈ Con tasas: 1 USD = 400 CUP. Solo para mostrar. ⚠️ Sin tasa de UYU, no incluido.');
+      await page.screenshot({ path: path.join(OUT, 'fase5-claro-total.png'), fullPage: true });
+      const s = await tg(page);
+      assert.deepStrictEqual([s.sent, s.main.visible, s.back.visible], [[], false, false]);
+      await page.click('#tabs button[data-view="list"]');                                 // las otras pestañas siguen andando
+      assert.strictEqual(await page.$$eval('#list .item', (x) => x.length), 8);
+      await page.click('#tabCh');
+      assert.strictEqual((await chartState(page)).chips[3], 'Total en CUP*');            // recuerda la moneda elegida
+      assert.deepStrictEqual(errors, []);
+      ok('gráficos del bot -> torta y barras exactas en CUP, USD, UYU y Total en CUP (sin tasa de UYU avisado)');
+      await ctx.close();
+    }
+
+    // 26) tema oscuro de Telegram (themeParams como variables CSS) + capturas
+    {
+      const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, timezoneId: TZ, locale: 'es-ES', colorScheme: 'dark' });
+      await ctx.route('https://telegram.org/**', (r) => r.fulfill({ status: 200, contentType: 'application/javascript', body: '' }));
+      await ctx.addInitScript(STUB); await ctx.addInitScript(DARK);
+      const page = await ctx.newPage(); const errors = []; page.on('pageerror', (e) => errors.push(String(e)));
+      await page.goto(base + '/' + CH_URL.slice(CH_URL.indexOf('#')));
+      await page.click('#tabCh');
+      const bg = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
+      assert.strictEqual(bg, 'rgb(23, 33, 43)');
+      const fills = await page.evaluate(() => ({ g: getComputedStyle(document.querySelector('#gBars rect.bg')).fill, t: getComputedStyle(document.querySelector('#gBars text')).fill,
+        leg: getComputedStyle(document.querySelector('#gLeg .lg')).color }));
+      assert.deepStrictEqual(fills, { g: 'rgb(236, 57, 66)', t: 'rgb(112, 132, 153)', leg: 'rgb(245, 245, 245)' });
+      await page.screenshot({ path: path.join(OUT, 'fase5-oscuro-cup.png'), fullPage: true });
+      await page.click('#gMon .chip[data-gmon="TOTAL"]');
+      await page.screenshot({ path: path.join(OUT, 'fase5-oscuro-total.png'), fullPage: true });
+      await page.click('#gMon .chip[data-gmon="UYU"]');
+      await page.screenshot({ path: path.join(OUT, 'fase5-oscuro-uyu.png'), fullPage: true });
+      assert.deepStrictEqual(errors, []);
+      ok('gráficos en tema oscuro -> colores del tema, capturas en ' + OUT);
+      await ctx.close();
+    }
+
+    // 27) anchos 360 y 420: sin desborde horizontal, 5 pestañas legibles, torta y barras dentro de la pantalla
+    for (const w of [360, 420]) {
+      const ctx = await browser.newContext({ viewport: { width: w, height: 800 }, deviceScaleFactor: 2, timezoneId: TZ, locale: 'es-ES' });
+      await ctx.route('https://telegram.org/**', (r) => r.fulfill({ status: 200, contentType: 'application/javascript', body: '' }));
+      await ctx.addInitScript(STUB);
+      const page = await ctx.newPage();
+      await page.goto(base + '/' + CH_URL.slice(CH_URL.indexOf('#')));
+      await page.click('#tabCh');
+      const m = await page.evaluate(() => ({
+        overflow: document.documentElement.scrollWidth - window.innerWidth,
+        tabsCut: Array.from(document.querySelectorAll('#tabs .tl')).filter((t) => t.scrollWidth > t.clientWidth + 1).map((t) => t.textContent),
+        pie: document.getElementById('gPie').getBoundingClientRect().right <= window.innerWidth,
+        bars: document.getElementById('gBars').getBoundingClientRect().right <= window.innerWidth,
+        legendCut: Array.from(document.querySelectorAll('#gLeg .lv2')).some((x) => x.getBoundingClientRect().right > window.innerWidth),
+        chipRows: new Set(Array.from(document.querySelectorAll('#gMon .chip')).map((e) => Math.round(e.getBoundingClientRect().top))).size,
+      }));
+      assert.deepStrictEqual(m, { overflow: 0, tabsCut: [], pie: true, bars: true, legendCut: false, chipRows: 1 }, 'ancho ' + w);
+      await page.screenshot({ path: path.join(OUT, 'fase5-claro-' + w + '.png'), fullPage: true });
+      await ctx.close();
+    }
+    ok('gráficos a 360 y 420 px -> sin desborde y pestañas legibles');
+
+    // 28) sin datos: sin fragmento, fragmento sin agregados, y moneda sin datos
+    {
+      let { ctx, page, errors } = await newPage(browser, base, '', true);
+      await page.click('#tabCh');
+      let c = await chartState(page);
+      assert.deepStrictEqual([c.empty, c.body, c.chips], ['Sin datos todavía. Manda /app para cargarlos.', false, []]);
+      await ctx.close();
+      ({ ctx, page, errors } = await newPage(browser, base, fragment(fixture(hoy)), true));      // fragmento viejo: sin p ni h
+      await page.click('#tabCh');
+      c = await chartState(page);
+      assert.deepStrictEqual([c.empty, c.body, c.chips], ['Sin datos todavía en CUP.', false, ['CUP*', 'USD', 'UYU']]);  // sin tasas: sin «Total»
+      await shot(page, '28-graficos-sin-datos.png');
+      await ctx.close();
+      const f = fixture(hoy);
+      f.p = [[1, 0, 12.5]]; f.h = [[1, 0, 0, 0, 0, 0, 12.5, 0, 0, 0, 0, 0, 0]]; f.r = [[2, 9.5, 0]];
+      ({ ctx, page, errors } = await newPage(browser, base, fragment(f), true));
+      await page.click('#tabCh');
+      c = await chartState(page);
+      assert.deepStrictEqual([c.chips, c.pie], [['CUP', 'USD*', 'UYU', 'Total en CUP'], ['Comida=12.5']]);   // arranca en la moneda con datos
+      await page.click('#gMon .chip[data-gmon="CUP"]');
+      assert.strictEqual((await chartState(page)).empty, 'Sin datos todavía en CUP.');
+      await page.click('#gMon .chip[data-gmon="TOTAL"]');                                   // solo hay USD y no tiene tasa
+      c = await chartState(page);
+      assert.deepStrictEqual([c.body, c.empty], [false, 'Sin datos todavía. ⚠️ Sin tasa de USD, no incluido.']);
+      // pie vacío pero barras con datos (mes actual sin gastos)
+      f.p = []; f.h = [[0, 100, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 500]];
+      await ctx.close();
+      ({ ctx, page, errors } = await newPage(browser, base, fragment(f), true));
+      await page.click('#tabCh');
+      c = await chartState(page);
+      assert.deepStrictEqual([c.chips[0], c.body, c.pie, c.g[0], c.i[5]], ['CUP*', true, [], 100, 500]);
+      assert.ok(await page.isVisible('#gPieEmpty'));
+      assert.ok(await page.isHidden('#gPieBox'));
+      assert.deepStrictEqual(errors, []);
+      ok('gráficos sin datos -> «Sin datos todavía» (sin fragmento, sin agregados, por moneda y total sin tasa)');
       await ctx.close();
     }
 
