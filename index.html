@@ -65,7 +65,12 @@ input[type=date]{margin-top:8px}
 .fbtn:disabled{opacity:.45}
 pre{background:var(--bg2);border-radius:10px;padding:10px;white-space:pre-wrap;word-break:break-all;font-size:13px;user-select:text;-webkit-user-select:text}
 .tabs{margin-bottom:8px}
-.tabs button{font-size:13px;padding:9px 4px;white-space:nowrap}
+.tabs button{font-size:12px;padding:6px 2px;white-space:nowrap;display:flex;flex-direction:column;align-items:center;gap:1px;line-height:1.15;min-width:0}
+.tabs button .te{font-size:17px}
+.tabs button .tl{overflow:hidden;text-overflow:ellipsis;max-width:100%}
+.item.off{opacity:.55}
+select{width:100%;font:inherit;color:var(--text);background:var(--bg2);border:0;border-radius:12px;padding:11px 12px}
+.addbtn{margin:0 0 10px}
 .item .lv{font-size:13px;font-weight:700;white-space:nowrap}
 .item .lv.ok{color:var(--ok)}
 .item .lv.warn{color:#d18b00}
@@ -103,9 +108,10 @@ input.bigin{font-size:24px;font-weight:700;text-align:center}
   <div id="notice" class="notice hidden">Abierta fuera de Telegram: modo de prueba. Al guardar se muestra el JSON que se enviaría al bot.</div>
   <p id="bal" class="hidden"></p>
   <div class="seg tabs" id="tabs">
-    <button type="button" data-view="new" class="on">➕ Nuevo</button>
-    <button type="button" data-view="list" id="tabList">📋 Movimientos</button>
-    <button type="button" data-view="budgets" id="tabBud">🎯 Presupuestos</button>
+    <button type="button" data-view="new" class="on"><span class="te">➕</span><span class="tl">Nuevo</span></button>
+    <button type="button" data-view="list" id="tabList"><span class="te">📋</span><span class="tl">Movimientos</span></button>
+    <button type="button" data-view="budgets" id="tabBud"><span class="te">🎯</span><span class="tl">Presupuestos</span></button>
+    <button type="button" data-view="fixed" id="tabFix"><span class="te">📌</span><span class="tl">Fijos</span></button>
   </div>
   <div class="top">
     <button id="back" class="back hidden" type="button">‹ Atrás</button>
@@ -205,6 +211,54 @@ input.bigin{font-size:24px;font-weight:700;text-align:center}
     </div>
   </section>
 
+  <!-- fijos mensuales (se anotan solos el día elegido) -->
+  <section class="screen" id="sF">
+    <button id="fxNew" class="fbtn addbtn" type="button">➕ Agregar fijo</button>
+    <p id="fxNote" class="hint"></p>
+    <div class="list" id="fxList"></div>
+  </section>
+
+  <!-- agregar / editar / quitar un fijo -->
+  <section class="screen" id="sFE">
+    <div class="seg" id="fxTipo">
+      <button type="button" data-t="g" class="on">Gasto</button>
+      <button type="button" data-t="i">Ingreso</button>
+    </div>
+    <label class="lbl" for="fxAmt">Monto mensual</label>
+    <input type="text" id="fxAmt" class="bigin" inputmode="decimal" maxlength="16" placeholder="Ej.: 1.500" autocomplete="off" enterkeyhint="done">
+    <div class="chips" id="fxMon"></div>
+    <label class="lbl" for="fxCat">Categoría</label>
+    <select id="fxCat"></select>
+    <label class="lbl">Cuenta</label>
+    <div class="chips left" id="fxCuentas"></div>
+    <label class="lbl" for="fxNota">Nota (opcional)</label>
+    <input type="text" id="fxNota" maxlength="30" placeholder="Ej.: luz, internet, alquiler" autocomplete="off" enterkeyhint="done">
+    <div class="count" id="fxNotaCount">0/30</div>
+    <label class="lbl" for="fxDia">Día del mes (1 a 31)</label>
+    <input type="text" id="fxDia" inputmode="numeric" maxlength="2" value="1" autocomplete="off" enterkeyhint="done">
+    <div id="fxActBox" class="hidden">
+      <label class="lbl">Estado</label>
+      <div class="seg" id="fxAct">
+        <button type="button" data-a="1" class="on">▶️ Activo</button>
+        <button type="button" data-a="0">⏸ Pausado</button>
+      </div>
+    </div>
+    <p id="fxInfo" class="hint"></p>
+    <button id="fxSave" class="fbtn" type="button">Agregar fijo</button>
+    <button id="fxDel" class="fbtn danger hidden" type="button">🗑️ Quitar fijo</button>
+    <div id="fxConfirm" class="confirm hidden">
+      <p>¿Quitar este fijo? Lo ya anotado queda en la planilla.</p>
+      <div class="two">
+        <button id="fxNo" class="fbtn ghost" type="button">Cancelar</button>
+        <button id="fxYes" class="fbtn danger" type="button">Sí, quitar</button>
+      </div>
+    </div>
+    <div id="fxOut" class="hidden">
+      <label class="lbl">JSON que se enviaría (prueba)</label>
+      <pre id="fxJson"></pre>
+    </div>
+  </section>
+
   <button id="fbtn" class="fbtn hidden" type="button">Siguiente</button>
 </div>
 
@@ -226,7 +280,8 @@ input.bigin{font-size:24px;font-weight:700;text-align:center}
   var CUENTAS = ['Efectivo', 'Banco', 'PayPal'];
   var TITLES = ['', 'Nuevo movimiento', 'Categoría', 'Detalles', 'Confirmar'];
   var MAX_INT_DIGITS = 9;
-  var SCREENS = ['s1', 's2', 's3', 's4', 'sL', 'sD', 'sB', 'sBE'];
+  var SCREENS = ['s1', 's2', 's3', 's4', 'sL', 'sD', 'sB', 'sBE', 'sF', 'sFE'];
+  var FX_NOTE_MAX = 30; // FixedEntries::NOTE_MAX del bot
   var MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
 
   var wa = (window.Telegram && window.Telegram.WebApp) || null;
@@ -238,7 +293,7 @@ input.bigin{font-size:24px;font-weight:700;text-align:center}
 
   function fresh() {
     return { view: 'flow', step: 1, t: 'g', amt: '', mon: 'CUP', cat: null, cuenta: 'Efectivo', fechaMode: 'hoy', fechaOtra: '', nota: '',
-      editId: null, notaOrig: '', cut: false, sel: -1, budCat: null, budMon: 'CUP' };
+      editId: null, notaOrig: '', cut: false, sel: -1, budCat: null, budMon: 'CUP', fx: null };
   }
   var st = fresh();
 
@@ -289,7 +344,8 @@ input.bigin{font-size:24px;font-weight:700;text-align:center}
 
   // ---- movimientos recientes: fragmento #m=<base64url de JSON> que pone el bot en la URL del botón ----
   // {"v":1,"t":unix,"d":"YYYY-MM-DD","c":[cats],"a":[cuentas],"m":[[id,tipo,monto,monIdx,catIdx,cuentaIdx,díasAntes(,nota(,1))]],
-  //  "b":[[catIdx,monIdx,presupuesto,gastadoDelMes]]}  ("b" solo si hay presupuestos)
+  //  "b":[[catIdx,monIdx,presupuesto,gastadoDelMes]],  ("b" solo si hay presupuestos)
+  //  "f":[[id,tipo,monto,monIdx,catIdx,cuentaIdx,día,activo(,nota)]]}  ("f" solo si hay fijos)
   // Telegram añade sus parámetros al mismo fragmento (#m=...&tgWebAppData=...), por eso se busca "m=".
   function b64urlDecode(s) {
     s = s.replace(/-/g, '+').replace(/_/g, '/');
@@ -326,7 +382,16 @@ input.bigin{font-size:24px;font-weight:700;text-align:center}
         if (typeof cat !== 'string' || !mon || typeof r[2] !== 'number' || !(r[2] > 0) || typeof r[3] !== 'number') return;
         budgets.push({ cat: cat, mon: mon, monto: r[2], gastado: r[3] });
       });
-      return { at: typeof d.t === 'number' ? d.t : 0, d: d.d, items: items, budgets: budgets };
+      var fixed = [];
+      (Array.isArray(d.f) ? d.f : []).forEach(function (r) {
+        if (!Array.isArray(r) || r.length < 8 || typeof r[0] !== 'string' || !/^f[0-9a-z]{1,12}$/.test(r[0])) return;
+        var cat = d.c[r[4]], cuenta = d.a[r[5]], mon = CURRENCIES[r[3]];
+        if (typeof cat !== 'string' || typeof cuenta !== 'string' || !mon || typeof r[2] !== 'number' || !(r[2] > 0)) return;
+        var dia = r[6] >= 1 && r[6] <= 31 ? Math.floor(r[6]) : 1;
+        fixed.push({ id: r[0], t: r[1] === 1 ? 'i' : 'g', monto: r[2], mon: mon, cat: cat, cuenta: cuenta, dia: dia, activo: r[7] !== 0,
+          nota: typeof r[8] === 'string' ? r[8] : '' });
+      });
+      return { at: typeof d.t === 'number' ? d.t : 0, d: d.d, items: items, budgets: budgets, fixed: fixed };
     } catch (e) { return null; }
   }
   var recent = readRecent();
@@ -486,7 +551,7 @@ input.bigin{font-size:24px;font-weight:700;text-align:center}
     if (st.step === 3) return { text: 'Siguiente', visible: true, active: true };
     return { text: st.editId ? 'Guardar cambios' : 'Guardar', visible: true, active: true };
   }
-  function canGoBack() { return st.view === 'detail' || st.view === 'budgetEdit' || (st.view === 'flow' && (st.step > 1 || !!st.editId)); }
+  function canGoBack() { return st.view === 'detail' || st.view === 'budgetEdit' || st.view === 'fixedEdit' || (st.view === 'flow' && (st.step > 1 || !!st.editId)); }
   function syncButtons() {
     var ms = mainState();
     if (inTg) {
@@ -505,9 +570,9 @@ input.bigin{font-size:24px;font-weight:700;text-align:center}
     var backSupported = inTg && wa.BackButton && (!wa.isVersionAtLeast || wa.isVersionAtLeast('6.1'));
     $('back').classList.toggle('hidden', backSupported || !canGoBack());
     // pestañas: solo al empezar un alta o en la lista
-    var tabsOn = st.view === 'list' || st.view === 'budgets' || (st.view === 'flow' && st.step === 1 && !st.editId);
+    var tabsOn = st.view === 'list' || st.view === 'budgets' || st.view === 'fixed' || (st.view === 'flow' && st.step === 1 && !st.editId);
     $('tabs').classList.toggle('hidden', !tabsOn);
-    var tab = st.view === 'list' || st.view === 'budgets' ? st.view : 'new';
+    var tab = st.view === 'list' || st.view === 'budgets' || st.view === 'fixed' ? st.view : 'new';
     Array.prototype.forEach.call($('tabs').children, function (c) { c.classList.toggle('on', c.getAttribute('data-view') === tab); });
   }
   function showScreen(id, title, steps) {
@@ -632,6 +697,100 @@ input.bigin{font-size:24px;font-weight:700;text-align:center}
     send({ v: 1, op: 'budget', cat: st.budCat, mon: st.budMon, monto: n }, 'budOut', 'budJson');
   }
 
+  // ---- fijos ----
+  function fxTitle(f) { return f.nota || f.cat; }
+  function renderFixed() {
+    var note = $('fxNote'), el = $('fxList');
+    el.textContent = '';
+    note.classList.remove('err');
+    if (!recent) {
+      note.textContent = 'Manda /app para ver tus fijos. Igual puedes agregar uno.';
+      note.classList.add('err');
+      return;
+    }
+    if (!recent.fixed.length) {
+      note.textContent = 'No tienes fijos. Un fijo (luz, internet, alquiler, sueldo…) se anota solo cada mes, el día que elijas.';
+      return;
+    }
+    note.textContent = 'Se anotan solos cada mes, el día indicado. Toca uno para editarlo, pausarlo o quitarlo.';
+    recent.fixed.forEach(function (f, i) {
+      var b = document.createElement('button');
+      b.type = 'button'; b.className = 'item' + (f.activo ? '' : ' off'); b.setAttribute('data-fx', String(i)); b.setAttribute('data-id', f.id);
+      var e = document.createElement('span'); e.className = 'ie'; e.textContent = EMOJI[f.cat] || (f.t === 'i' ? '💰' : '💸');
+      var t = document.createElement('span'); t.className = 'it';
+      var tb = document.createElement('b'); tb.textContent = fxTitle(f);
+      var ts = document.createElement('small');
+      ts.textContent = 'Día ' + f.dia + ' · ' + f.cat + ' · ' + f.cuenta + (f.activo ? '' : ' · ⏸ pausado');
+      t.appendChild(tb); t.appendChild(ts);
+      var a = document.createElement('span'); a.className = 'ia ' + f.t; a.textContent = (f.t === 'g' ? '−' : '+') + fmtMonto(f.monto) + ' ' + f.mon;
+      b.appendChild(e); b.appendChild(t); b.appendChild(a);
+      el.appendChild(b);
+    });
+  }
+  function showFixed() {
+    if (st.editId) { st = fresh(); st.mon = defaultMon; renderSegs(); }
+    st.view = 'fixed';
+    st.fx = null;
+    renderFixed();
+    showScreen('sF', 'Fijos', recent && recent.fixed.length ? String(recent.fixed.length) : '');
+  }
+  function renderFxCats() {
+    var sel = $('fxCat'), list = withCurrent(st.fx.t === 'i' ? CATS_I : CATS_G, st.fx.cat);
+    sel.textContent = '';
+    list.forEach(function (c) {
+      var o = document.createElement('option'); o.value = c; o.textContent = (EMOJI[c] ? EMOJI[c] + ' ' : '') + c;
+      if (c === st.fx.cat) o.selected = true;
+      sel.appendChild(o);
+    });
+    st.fx.cat = sel.value;
+  }
+  function renderFixedEdit() {
+    var f = st.fx;
+    Array.prototype.forEach.call($('fxTipo').children, function (c) { c.classList.toggle('on', c.getAttribute('data-t') === f.t); });
+    Array.prototype.forEach.call($('fxAct').children, function (c) { c.classList.toggle('on', c.getAttribute('data-a') === (f.activo ? '1' : '0')); });
+    $('fxAmt').value = f.amt;
+    chipList($('fxMon'), CURRENCIES, f.mon, 'data-mon');
+    renderFxCats();
+    chipList($('fxCuentas'), withCurrent(CUENTAS, f.cuenta), f.cuenta, 'data-cuenta');
+    $('fxNota').value = f.nota;
+    $('fxNotaCount').textContent = f.nota.length + '/' + FX_NOTE_MAX;
+    $('fxDia').value = f.dia;
+    $('fxActBox').classList.toggle('hidden', !f.id);
+    $('fxSave').textContent = f.id ? 'Guardar cambios' : 'Agregar fijo';
+    $('fxDel').classList.toggle('hidden', !f.id);
+    $('fxConfirm').classList.add('hidden');
+    $('fxSave').classList.remove('hidden');
+    var info = $('fxInfo'); info.classList.remove('err');
+    info.textContent = f.id ? '' : 'Se anota solo cada mes ese día (si el mes es más corto, el último día). Empieza desde hoy.';
+    $('fxOut').classList.add('hidden');
+  }
+  function showFixedEdit(i) {
+    var f = i === null ? null : recent.fixed[i];
+    st.view = 'fixedEdit';
+    st.fx = f ? { id: f.id, t: f.t, amt: fmtInput(f.monto), mon: f.mon, cat: f.cat, cuenta: f.cuenta, nota: f.nota, dia: String(f.dia), activo: f.activo }
+      : { id: null, t: 'g', amt: '', mon: defaultMon, cat: null, cuenta: 'Efectivo', nota: '', dia: '1', activo: true };
+    renderFixedEdit();
+    showScreen('sFE', f ? 'Editar fijo' : 'Nuevo fijo', '');
+  }
+  function fxError(msg) {
+    haptic('not', 'error');
+    var info = $('fxInfo'); info.textContent = msg; info.classList.add('err');
+  }
+  function saveFixed() {
+    var f = st.fx;
+    f.amt = $('fxAmt').value; f.nota = $('fxNota').value; f.dia = $('fxDia').value; f.cat = $('fxCat').value;
+    var n = parseMonto(f.amt);
+    if (!(n > 0)) return fxError('Escribe un monto mayor que 0 (ej.: 1.500 o 1500,50).');
+    var dia = String(f.dia).trim();
+    if (!/^\d{1,2}$/.test(dia) || +dia < 1 || +dia > 31) return fxError('El día del mes va de 1 a 31.');
+    var p = { v: 1, op: f.id ? 'fijo_edit' : 'fijo_add' };
+    if (f.id) p.id = f.id;
+    p.t = f.t; p.monto = n; p.mon = f.mon; p.cat = f.cat || 'Otros'; p.cuenta = f.cuenta;
+    p.nota = cleanText(f.nota, FX_NOTE_MAX).replace(/^[=+\-@]+/, '').trim(); p.dia = +dia;
+    if (f.id) p.activo = !!f.activo;
+    send(p, 'fxOut', 'fxJson');
+  }
+
   function showDetail(i) {
     st.view = 'detail';
     st.sel = i;
@@ -681,6 +840,7 @@ input.bigin{font-size:24px;font-weight:700;text-align:center}
   function back() {
     if (st.view === 'detail') { haptic('sel'); showList(); }
     else if (st.view === 'budgetEdit') { haptic('sel'); showBudgets(); }
+    else if (st.view === 'fixedEdit') { haptic('sel'); showFixed(); }
     else if (st.view === 'flow' && st.step > 1) { haptic('sel'); go(st.step - 1); }
     else if (st.view === 'flow' && st.editId) { haptic('sel'); var i = st.sel; st = fresh(); st.mon = defaultMon; renderSegs(); showDetail(i); }
   }
@@ -719,8 +879,49 @@ input.bigin{font-size:24px;font-weight:700;text-align:center}
     var b = e.target.closest('button[data-view]'); if (!b) return;
     haptic('sel');
     var v = b.getAttribute('data-view');
-    if (v === 'list') showList(); else if (v === 'budgets') showBudgets(); else newEntry();
+    if (v === 'list') showList(); else if (v === 'budgets') showBudgets(); else if (v === 'fixed') showFixed(); else newEntry();
   });
+  $('fxNew').addEventListener('click', function () { haptic('sel'); showFixedEdit(null); });
+  $('fxList').addEventListener('click', function (e) {
+    var b = e.target.closest('button[data-fx]'); if (!b) return;
+    haptic('sel');
+    showFixedEdit(Number(b.getAttribute('data-fx')));
+  });
+  $('fxTipo').addEventListener('click', function (e) {
+    var b = e.target.closest('button[data-t]'); if (!b || !st.fx) return;
+    var t = b.getAttribute('data-t');
+    if (t !== st.fx.t) { st.fx.t = t; st.fx.cat = null; haptic('sel'); }
+    st.fx.amt = $('fxAmt').value; st.fx.nota = $('fxNota').value; st.fx.dia = $('fxDia').value;
+    renderFixedEdit();
+  });
+  $('fxAct').addEventListener('click', function (e) {
+    var b = e.target.closest('button[data-a]'); if (!b || !st.fx) return;
+    st.fx.activo = b.getAttribute('data-a') === '1'; haptic('sel');
+    Array.prototype.forEach.call(this.children, function (c) { c.classList.toggle('on', c === b); });
+  });
+  $('fxMon').addEventListener('click', function (e) {
+    var b = e.target.closest('button[data-mon]'); if (!b || !st.fx) return;
+    st.fx.mon = b.getAttribute('data-mon'); haptic('sel');
+    chipList($('fxMon'), CURRENCIES, st.fx.mon, 'data-mon');
+  });
+  $('fxCuentas').addEventListener('click', function (e) {
+    var b = e.target.closest('button[data-cuenta]'); if (!b || !st.fx) return;
+    st.fx.cuenta = b.getAttribute('data-cuenta'); haptic('sel');
+    chipList($('fxCuentas'), withCurrent(CUENTAS, st.fx.cuenta), st.fx.cuenta, 'data-cuenta');
+  });
+  $('fxCat').addEventListener('change', function () { if (st.fx) st.fx.cat = this.value; });
+  $('fxNota').addEventListener('input', function () {
+    if (this.value.length > FX_NOTE_MAX) this.value = this.value.slice(0, FX_NOTE_MAX);
+    $('fxNotaCount').textContent = this.value.length + '/' + FX_NOTE_MAX;
+  });
+  ['fxAmt', 'fxNota', 'fxDia'].forEach(function (id) { $(id).addEventListener('keydown', function (e) { if (e.key === 'Enter') this.blur(); }); });
+  $('fxSave').addEventListener('click', saveFixed);
+  $('fxDel').addEventListener('click', function () {
+    haptic('imp', 'medium');
+    $('fxConfirm').classList.remove('hidden'); $('fxDel').classList.add('hidden'); $('fxSave').classList.add('hidden');
+  });
+  $('fxNo').addEventListener('click', function () { haptic('sel'); $('fxConfirm').classList.add('hidden'); $('fxDel').classList.remove('hidden'); $('fxSave').classList.remove('hidden'); });
+  $('fxYes').addEventListener('click', function () { send({ v: 1, op: 'fijo_del', id: st.fx.id }, 'fxOut', 'fxJson'); });
   $('budList').addEventListener('click', function (e) {
     var b = e.target.closest('button[data-cat]'); if (!b) return;
     haptic('sel');

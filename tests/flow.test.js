@@ -335,7 +335,7 @@ async function shot(page, name) { if (SHOTS) await page.screenshot({ path: path.
     {
       for (const q of ['', '#m=esto-no-es-json', '#tgWebAppData=&tgWebAppPlatform=android']) {
         const { ctx, page, errors } = await newPage(browser, base, q, true);
-        assert.strictEqual(await page.textContent('#tabList'), '📋 Movimientos'); // nombre fijo
+        assert.strictEqual(await page.textContent('#tabList .tl'), 'Movimientos'); // nombre fijo
         await page.click('#tabs button[data-view="list"]');
         assert.strictEqual(await page.textContent('#listEmpty'), 'Manda /app para cargar tus movimientos.');
         assert.strictEqual(await page.$$eval('#list .item', (b) => b.length), 0);
@@ -476,6 +476,119 @@ async function shot(page, name) { if (SHOTS) await page.screenshot({ path: path.
       assert.ok(rows.includes('Suministros (luz, agua, gas, etc.)|45,25 / 40,50 USD|🚨 111%'), rows.join('\n'));
       assert.deepStrictEqual(errors, []);
       ok('presupuestos del bot -> ' + rows.filter((r) => !r.includes('Sin presupuesto')).length + ' con presupuesto');
+      await ctx.close();
+    }
+
+    // 16) Pestaña Fijos desde el fragmento: 4 pestañas caben, lista con pausados
+    {
+      const f = fixture(hoy);
+      f.c.push('Suministros (luz, agua, gas, etc.)', 'Sueldo');
+      f.f = [['fk3x9', 0, 1500, 0, 3, 0, 5, 1, 'Luz'], ['fk3xa', 1, 20.5, 1, 4, 1, 31, 0], ['fbad', 0, 0, 0, 0, 0, 1, 1], ['123', 0, 5, 0, 0, 0, 1, 1]];
+      const { ctx, page, errors } = await newPage(browser, base, fragment(f), true);
+      const fits = await page.$$eval('#tabs button', (bs) => bs.map((b) => b.querySelector('.tl').scrollWidth <= b.querySelector('.tl').clientWidth + 1 && b.getBoundingClientRect().width >= 70));
+      assert.deepStrictEqual(fits, [true, true, true, true]);
+      await page.click('#tabFix');
+      assert.strictEqual(await page.textContent('#title'), 'Fijos');
+      assert.strictEqual(await page.textContent('#steps'), '2');                 // los 2 inválidos se ignoran
+      const rows = await page.$$eval('#fxList .item', (b) => b.map((x) => [x.getAttribute('data-id'), x.className, x.querySelector('b').textContent, x.querySelector('small').textContent, x.querySelector('.ia').textContent].join('|')));
+      assert.deepStrictEqual(rows, [
+        'fk3x9|item|Luz|Día 5 · Suministros (luz, agua, gas, etc.) · Banco|−1.500 CUP',
+        'fk3xa|item off|Sueldo|Día 31 · Sueldo · Efectivo · ⏸ pausado|+20,50 USD'
+      ]);
+      const s = await tg(page); assert.strictEqual(s.main.visible, false); assert.strictEqual(s.back.visible, false);
+      await shot(page, '16-fijos.png');
+      assert.deepStrictEqual(errors, []);
+      ok('fijos del fragmento -> 2 en la lista, pausado atenuado, 4 pestañas caben');
+
+      // 17) editar: monto, día y pausar -> fijo_edit exacto (por sendData)
+      await page.click('#fxList .item[data-id="fk3x9"]');
+      assert.strictEqual(await page.textContent('#title'), 'Editar fijo');
+      assert.strictEqual(await page.inputValue('#fxAmt'), '1.500');
+      assert.strictEqual(await page.inputValue('#fxCat'), 'Suministros (luz, agua, gas, etc.)');
+      assert.strictEqual(await page.inputValue('#fxDia'), '5');
+      assert.ok(await page.isVisible('#fxActBox'));
+      assert.strictEqual((await tg(page)).back.visible, true);
+      await page.fill('#fxAmt', '1.700,5');
+      await page.fill('#fxDia', '10');
+      await page.click('#fxAct button[data-a="0"]');
+      await shot(page, '17-fijo-editar.png');
+      await page.click('#fxSave');
+      let sent = (await tg(page)).sent;
+      assert.deepStrictEqual(sent.map((x) => JSON.parse(x)), [{ v: 1, op: 'fijo_edit', id: 'fk3x9', t: 'g', monto: 1700.5, mon: 'CUP', cat: 'Suministros (luz, agua, gas, etc.)', cuenta: 'Banco', nota: 'Luz', dia: 10, activo: false }]);
+      ok('editar fijo -> fijo_edit con activo false');
+      await ctx.close();
+    }
+
+    // 18) quitar con confirmación y reanudar un pausado (sin Telegram: JSON en pantalla)
+    {
+      const f = fixture(hoy);
+      f.c.push('Sueldo');
+      f.f = [['fk3xa', 1, 20.5, 1, 3, 1, 31, 0]];
+      const { ctx, page, errors } = await newPage(browser, base, fragment(f), false);
+      await page.click('#tabFix');
+      await page.click('#fxList .item');
+      assert.ok(await page.isVisible('#fxAct button[data-a="0"].on'));
+      await page.click('#fxAct button[data-a="1"]');
+      await page.click('#fxSave');
+      assert.strictEqual(await page.textContent('#fxJson'), '{"v":1,"op":"fijo_edit","id":"fk3xa","t":"i","monto":20.5,"mon":"USD","cat":"Sueldo","cuenta":"Efectivo","nota":"","dia":31,"activo":true}');
+      await page.click('#fxDel');
+      assert.ok(await page.isVisible('#fxConfirm')); assert.ok(await page.isHidden('#fxSave'));
+      await page.click('#fxNo');
+      assert.ok(await page.isHidden('#fxConfirm')); assert.ok(await page.isVisible('#fxDel'));
+      await page.click('#fxDel'); await page.click('#fxYes');
+      assert.strictEqual(await page.textContent('#fxJson'), '{"v":1,"op":"fijo_del","id":"fk3xa"}');
+      await page.click('#back');
+      assert.ok(await page.isVisible('#sF'));
+      assert.deepStrictEqual(errors, []);
+      ok('reanudar y quitar fijo (con confirmación)');
+      await ctx.close();
+    }
+
+    // 19) agregar fijo sin fragmento: aviso, validación de monto y día, ingreso cambia categorías
+    {
+      const { ctx, page, errors } = await newPage(browser, base, '', false);
+      await page.click('#tabFix');
+      assert.ok((await page.textContent('#fxNote')).includes('Manda /app'));
+      await page.click('#fxNew');
+      assert.strictEqual(await page.textContent('#title'), 'Nuevo fijo');
+      assert.ok(await page.isHidden('#fxActBox')); assert.ok(await page.isHidden('#fxDel'));
+      assert.strictEqual(await page.inputValue('#fxDia'), '1');
+      await page.click('#fxSave');
+      assert.ok((await page.textContent('#fxInfo')).includes('monto mayor que 0'));
+      await page.fill('#fxAmt', '3.000');
+      await page.fill('#fxDia', '32');
+      await page.click('#fxSave');
+      assert.strictEqual(await page.textContent('#fxInfo'), 'El día del mes va de 1 a 31.');
+      assert.ok(await page.isHidden('#fxOut'));
+      await page.fill('#fxDia', '15');
+      await page.click('#fxTipo button[data-t="i"]');
+      assert.strictEqual(await page.inputValue('#fxCat'), 'Sueldo');
+      assert.strictEqual(await page.inputValue('#fxAmt'), '3.000');            // cambiar tipo no borra lo escrito
+      await page.click('#fxTipo button[data-t="g"]');
+      await page.selectOption('#fxCat', 'Vivienda');
+      await page.click('#fxCuentas button[data-cuenta="Banco"]');
+      await page.click('#fxMon button[data-mon="USD"]');
+      await page.fill('#fxNota', '  =Alquiler   del  depto con nombre muy largo  ');
+      assert.strictEqual(await page.textContent('#fxNotaCount'), '30/30');
+      await page.click('#fxSave');
+      assert.strictEqual(await page.textContent('#fxJson'), '{"v":1,"op":"fijo_add","t":"g","monto":3000,"mon":"USD","cat":"Vivienda","cuenta":"Banco","nota":"Alquiler del depto con n","dia":15}');
+      await shot(page, '19-fijo-nuevo.png');
+      assert.deepStrictEqual(errors, []);
+      ok('agregar fijo -> validación y fijo_add limpio');
+      await ctx.close();
+    }
+
+    // 20) Fragmento con fijos generado por el bot (PHP)
+    {
+      const botUrl = 'https://mrf3lipe.github.io/gastos-miniapp/?v=5#m=eyJ2IjoxLCJ0IjoxNzkwNjE2MzAwLCJkIjoiMjAyNi0wOS0yOCIsImMiOlsiU3VtaW5pc3Ryb3MgKGx1eiwgYWd1YSwgZ2FzLCBldGMuKSIsIlN1ZWxkbyJdLCJhIjpbIkJhbmNvIiwiRWZlY3Rpdm8iXSwibSI6W1siZmlqbzpmazE6MjAyNi0wOSIsMCwxNTAwLDAsMCwwLDI3LCJMdXoiXV0sImYiOltbImZrMSIsMCwxNTAwLDAsMCwwLDEsMSwiTHV6Il0sWyJmazIiLDEsMjAuNSwxLDEsMSwzMSwwXV19'; // php: WebAppData::url(...) con 2 fijos y 1 movimiento fijo:fk1:2026-09
+      const { ctx, page, errors } = await newPage(browser, base, botUrl.slice(botUrl.indexOf('#')), true);
+      await page.click('#tabFix');
+      const rows = await page.$$eval('#fxList .item', (b) => b.map((x) => x.getAttribute('data-id') + '|' + x.querySelector('b').textContent + '|' + x.querySelector('small').textContent + '|' + x.querySelector('.ia').textContent));
+      assert.deepStrictEqual(rows, ['fk1|Luz|Día 1 · Suministros (luz, agua, gas, etc.) · Banco|−1.500 CUP', 'fk2|Sueldo|Día 31 · Sueldo · Efectivo · ⏸ pausado|+20,50 USD']);
+      await page.click('#tabList');
+      assert.strictEqual(await page.getAttribute('#list .item', 'data-id'), 'fijo:fk1:2026-09');   // el movimiento anotado por el fijo se puede editar
+      assert.deepStrictEqual(errors, []);
+      ok('fijos del bot -> ' + rows.length + ' fijos');
       await ctx.close();
     }
 
