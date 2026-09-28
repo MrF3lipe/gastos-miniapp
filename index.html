@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gastos · prueba</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+body{font-family:system-ui,sans-serif;margin:0;padding:24px;background:var(--tg-theme-bg-color,#fff);color:var(--tg-theme-text-color,#111)}
+h1{font-size:22px}.ok{font-size:48px}p{line-height:1.4}
+</style>
+</head>
+<body>
+<div class="ok">✅</div>
+<h1>La página de prueba abre</h1>
+<p>Si ves esto, GitHub Pages funciona desde tu conexión.</p>
+<p id="tg">Abierta en el navegador.</p>
+<script>
+const w=window.Telegram&&Telegram.WebApp;
+if(w&&w.initData){w.ready();w.expand();document.getElementById('tg').textContent='Abierta dentro de Telegram (versión '+w.version+', '+w.platform+').';}
+</script>
+</body>
+</html>
