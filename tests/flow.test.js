@@ -190,7 +190,7 @@ async function shot(page, name) { if (SHOTS) await page.screenshot({ path: path.
     {
       const { ctx, page, errors } = await newPage(browser, base, '?menu=1', true);
       assert.ok(await page.isVisible('#notice'));
-      assert.ok((await page.textContent('#notice')).includes('➕ Anotar'));
+      assert.ok((await page.textContent('#notice')).includes('📱 App'));
       await keys(page, ['5']);
       await mainClick(page);
       await page.click('#cats button[data-cat="Otros"]');
@@ -485,8 +485,8 @@ async function shot(page, name) { if (SHOTS) await page.screenshot({ path: path.
       f.c.push('Suministros (luz, agua, gas, etc.)', 'Sueldo');
       f.f = [['fk3x9', 0, 1500, 0, 3, 0, 5, 1, 'Luz'], ['fk3xa', 1, 20.5, 1, 4, 1, 31, 0], ['fbad', 0, 0, 0, 0, 0, 1, 1], ['123', 0, 5, 0, 0, 0, 1, 1]];
       const { ctx, page, errors } = await newPage(browser, base, fragment(f), true);
-      const fits = await page.$$eval('#tabs button', (bs) => bs.map((b) => b.querySelector('.tl').scrollWidth <= b.querySelector('.tl').clientWidth + 1 && b.getBoundingClientRect().width >= 70));
-      assert.deepStrictEqual(fits, [true, true, true, true]);                // 4 pestañas (Gráficos va en su propio botón)
+      const fits = await page.$$eval('#tabs button', (bs) => bs.map((b) => b.querySelector('.tl').scrollWidth <= b.querySelector('.tl').clientWidth + 1 && b.getBoundingClientRect().width >= 48));
+      assert.deepStrictEqual(fits, [true, true, true, true, true, true]);    // 6 pestañas: Nuevo, Balance, Movim., Gráficos, Presup., Fijos
       await page.click('#tabFix');
       assert.strictEqual(await page.textContent('#title'), 'Fijos');
       assert.strictEqual(await page.textContent('#steps'), '2');                 // los 2 inválidos se ignoran
@@ -498,7 +498,7 @@ async function shot(page, name) { if (SHOTS) await page.screenshot({ path: path.
       const s = await tg(page); assert.strictEqual(s.main.visible, false); assert.strictEqual(s.back.visible, false);
       await shot(page, '16-fijos.png');
       assert.deepStrictEqual(errors, []);
-      ok('fijos del fragmento -> 2 en la lista, pausado atenuado, 5 pestañas caben');
+      ok('fijos del fragmento -> 2 en la lista, pausado atenuado, 6 pestañas caben');
 
       // 17) editar: monto, día y pausar -> fijo_edit exacto (por sendData)
       await page.click('#fxList .item[data-id="fk3x9"]');
@@ -674,7 +674,9 @@ async function shot(page, name) { if (SHOTS) await page.screenshot({ path: path.
     // ---- Gráficos ----
     // php /tmp gen: WebAppData::keyboard(...) con Charts::aggregate (CUP, USD, UYU) y tasa USD 400
     const CH_URL = 'https://mrf3lipe.github.io/gastos-miniapp/?v=8&tab=g#m=eyJ2IjoxLCJ0IjoxNzkwNjE2MzAwLCJkIjoiMjAyNi0wOS0yOCIsImMiOlsiQ29taWRhIiwiVHJhbnNwb3J0ZSIsIlJlZ2Fsb3MiXSwiYSI6W10sIm0iOltdLCJyIjpbWzEsNDAwLDFdXSwicCI6W1swLDAsMTUwMSwxLDMwMF0sWzEsMCwxMi4yNV0sWzIsMiwyNTFdXSwiaCI6W1swLDAsMCwwLDAsODAwLDE4MDEsMCwwLDAsMCwwLDIwMDAwXSxbMSwwLDAsNDAsMCwwLDEyLjI1LDAsMCwwLDEwMCwwLDBdLFsyLDAsMCwwLDAsMCwyNTEsMCwwLDAsMCwwLDBdXX0'; // botón «📈 Gráficos»: ?tab=g, solo gráficos + tasas
-    const AN_URL = 'https://mrf3lipe.github.io/gastos-miniapp/?v=8#m=eyJ2IjoxLCJ0IjoxNzkwNjE2MzAwLCJkIjoiMjAyNi0wOS0yOCIsImMiOlsiQ29taWRhIiwiU3VlbGRvIiwiVHJhbnNwb3J0ZSIsImNvbWlkYSIsIlJlZ2Fsb3MiLCJGcmVlbGFuY2UiLCJWaWFqZXMiXSwiYSI6WyJFZmVjdGl2byJdLCJtIjpbWzcwMSwwLDE1MDAuNSwwLDAsMCwwLCJhbG11ZXJ6byJdLFsxLDEsMjAwMDAsMCwxLDAsMV0sWy0yLDAsMzAwLDAsMiwwLDEsInRheGkiXSxbLTEsMCwxMi4yNSwxLDMsMCwyLCJwaXp6YSJdLFstMSwwLDI1MC42LDIsNCwwLDMsImZsb3JlcyJdLFstNDgsMCw4MDAsMCwwLDAsNDksIngiXSxbLTMwLDEsMTAwLDEsNSwwLDYzLCJ4Il0sWy0yMCwwLDQwLDEsNiwwLDExMCwieCJdXSwiciI6W1sxLDQwMCwxXV19'; // botón «➕ Anotar» del mismo teclado: sin gráficos
+    // php: WebAppData::url(...) del botón «📱 App» (?v=10): movimientos + presupuestos + fijo + tasa USD 400 + balance ("s") + gráficos
+    const APP_URL = 'https://mrf3lipe.github.io/gastos-miniapp/?v=10#m=eyJ2IjoxLCJ0IjoxNzkwNjE2MzAwLCJkIjoiMjAyNi0wOS0yOCIsImMiOlsiQ29taWRhIiwiVHJhbnNwb3J0ZSIsIlZpdmllbmRhIiwiU3VlbGRvIiwiUmVnYWxvcyIsIkZyZWVsYW5jZSIsIlZpYWplcyJdLCJhIjpbIkJhbmNvIiwiRWZlY3Rpdm8iLCJQYXlQYWwiXSwibSI6W1s3MDEsMCwxNTAwLjUsMCwwLDEsMCwiYWxtdWVyem8iXSxbMSwxLDIwMDAwLDAsMywwLDFdLFstMywwLDMwMCwwLDEsMSwxLCJ0YXhpIl0sWy0xLDAsMTIuMjUsMSwwLDAsMiwicGl6emEiXSxbLTEsMCwyNTAuNiwyLDQsMSwzLCJmbG9yZXMiXSxbLTQ3LDAsODAwLDAsMCwxLDQ5LCJ4Il0sWy0yMCwxLDEwMCwxLDUsMiw3MCwieCJdLFstMTAsMCw0MCwxLDYsMCwxMDUsIngiXV0sImIiOltbMCwwLDIwMDAsMTUwMC41XSxbMSwwLDI1MCwzMDBdXSwiZiI6W1siZmszeDkiLDAsMTUwMCwwLDIsMCw1LDEsIkFscXVpbGVyIl1dLCJyIjpbWzEsNDAwLDFdXSwicyI6W1swLDIwMDAwLDE4MDAuNV0sWzEsMCwxMi4yNV0sWzIsMCwyNTAuNl1dLCJwIjpbWzAsMCwxNTAxLDEsMzAwXSxbMSwwLDEyLjI1XSxbMiw0LDI1MV1dLCJoIjpbWzAsMCwwLDAsMCw4MDAsMTgwMSwwLDAsMCwwLDAsMjAwMDBdLFsxLDAsMCw0MCwwLDAsMTIuMjUsMCwwLDAsMTAwLDAsMF0sWzIsMCwwLDAsMCwwLDI1MSwwLDAsMCwwLDAsMF1dfQ';
+    const APP_Q = APP_URL.slice(APP_URL.indexOf('#'));
     const CH_Q = CH_URL.slice(CH_URL.indexOf('?'));
     const DARK = `(() => { const v = { 'bg-color': '#17212b', 'secondary-bg-color': '#232e3c', 'text-color': '#f5f5f5', 'hint-color': '#708499',
       'link-color': '#6ab3f3', 'button-color': '#5288c1', 'button-text-color': '#ffffff', 'destructive-text-color': '#ec3942' };
@@ -702,9 +704,9 @@ async function shot(page, name) { if (SHOTS) await page.screenshot({ path: path.
     // 25) fragmento del bot (PHP): torta y barras con los valores exactos; cambian con el selector de moneda
     {
       const { ctx, page, errors } = await newPage(browser, base, CH_Q, true);
-      assert.ok(await page.isVisible('#sG'));                                             // ?tab=g abre directo en Gráficos
-      assert.ok(await page.isHidden('#tabs'));                                            // sin pestañas: solo mostrar
-      assert.ok(await page.isVisible('#gHint'));
+      assert.ok(await page.isVisible('#sG'));                                             // ?tab=g (compatibilidad) abre en Gráficos
+      assert.ok(await page.isVisible('#tabs'));                                           // ahora con todas las pestañas
+      assert.strictEqual(await page.getAttribute('#tabs button.on', 'data-view'), 'charts');
       assert.ok(await page.isHidden('#notice'));
       assert.strictEqual(await page.textContent('#title'), 'Gráficos');
       assert.strictEqual(await page.textContent('#gPieT'), 'Gastos de septiembre 2026 por categoría');
@@ -755,22 +757,100 @@ async function shot(page, name) { if (SHOTS) await page.screenshot({ path: path.
       const s = await tg(page);
       assert.deepStrictEqual([s.sent, s.main.visible, s.back.visible], [[], false, false]);
       assert.deepStrictEqual(errors, []);
-      ok('gráficos del bot (?tab=g) -> abre directo en Gráficos; torta y barras exactas en CUP, USD, UYU y Total en CUP');
+      ok('fragmento viejo con ?tab=g -> abre en la pestaña Gráficos; torta y barras exactas en CUP, USD, UYU y Total en CUP');
       await ctx.close();
     }
 
-    // 25b) el botón «➕ Anotar» del mismo teclado: arranca en «Nuevo», 4 pestañas, sin Gráficos
+    const balState = (page) => page.evaluate(() => ({
+      empty: document.getElementById('balEmpty').classList.contains('hidden') ? '' : document.getElementById('balEmpty').textContent,
+      cards: Array.from(document.querySelectorAll('#balList .bcard')).map((c) => c.querySelector('h3').textContent + ': '
+        + Array.from(c.querySelectorAll('.row')).map((r) => Array.from(r.children).map((x) => x.textContent).join(' ')).join(' | ')),
+      cup: document.getElementById('balCup').classList.contains('hidden') ? '' : document.getElementById('balCup').querySelector('h3').textContent + ': '
+        + Array.from(document.querySelectorAll('#balCup .row')).map((r) => Array.from(r.children).map((x) => x.textContent).join(' ')).join(' | '),
+      note: document.getElementById('balNote').classList.contains('hidden') ? '' : document.getElementById('balNote').textContent,
+      bud: Array.from(document.querySelectorAll('#balBud .item')).map((x) => x.querySelector('b').textContent + ' ' + x.querySelector('small').textContent + ' ' + x.querySelector('.lv').textContent),
+    }));
+
+    // 25b) botón «📱 App» (?v=10): arranca en «Nuevo» con 6 pestañas; Balance como /balance; Gráficos adentro
     {
-      const { ctx, page, errors } = await newPage(browser, base, AN_URL.slice(AN_URL.indexOf('?')), true);
+      const { ctx, page, errors } = await newPage(browser, base, '?v=10' + APP_Q, true);
       assert.ok(await page.isVisible('#s1'));
-      assert.deepStrictEqual(await page.$$eval('#tabs button', (b) => b.map((x) => x.getAttribute('data-view'))), ['new', 'list', 'budgets', 'fixed']);
-      assert.strictEqual(await page.$('#tabCh'), null);
-      assert.ok(await page.isHidden('#gHint'));
+      assert.deepStrictEqual(await page.$$eval('#tabs button', (b) => b.map((x) => x.getAttribute('data-view'))), ['new', 'balance', 'list', 'charts', 'budgets', 'fixed']);
+      await page.click('#tabBal');
+      assert.strictEqual(await page.textContent('#title'), 'Balance de septiembre 2026');
+      const b = await balState(page);
+      assert.deepStrictEqual(b, {
+        empty: '',
+        cards: [
+          'CUP: Ingresos +20.000 CUP | Gastos −1.800,50 CUP | ✅ Balance 18.199,50 CUP',
+          'USD: Ingresos +0 USD | Gastos −12,25 USD | ⚠️ Balance −12,25 USD',
+          'UYU: Ingresos +0 UYU | Gastos −250,60 UYU | ⚠️ Balance −250,60 UYU',
+        ],
+        // 1.800,50 + 12,25 x 400 = 6.700,50; UYU sin tasa: parcial (igual que /balance)
+        cup: '≈ Total en CUP (parcial): Ingresos +20.000 CUP | Gastos −6.700,50 CUP | ≈ Balance 13.299,50 CUP',
+        note: 'Tasas: 1 USD = 400 CUP (27/09/26). Solo para mostrar. ⚠️ Sin tasa de UYU, no incluido. Cárgala en 🎯 Presup. → 💱 Tasas.',
+        bud: ['Transporte 300 / 250 CUP 🚨 120%', 'Comida 1.500,50 / 2.000 CUP ✅ 75%'],
+      });
+      let s = await tg(page); assert.deepStrictEqual([s.main.visible, s.back.visible, s.sent], [false, false, []]);
+      await page.click('#balBud .item[data-cat="Comida"]');                               // un presupuesto se edita desde ahí
+      assert.strictEqual(await page.textContent('#title'), 'Comida');
+      assert.strictEqual(await page.inputValue('#budAmt'), '2.000');
+      await page.evaluate(() => window.__tg.back.cb());
+      await page.click('#tabCh');                                                         // gráficos dentro de la misma app
+      assert.ok(await page.isVisible('#sG'));
+      const c = await chartState(page);
+      assert.deepStrictEqual([c.chips, c.pie, c.g, c.i], [['CUP*', 'USD', 'UYU', 'Total en CUP'], ['Comida=1501', 'Transporte=300'], [0, 0, 0, 0, 800, 1801], [0, 0, 0, 0, 0, 20000]]);
       await page.click('#tabs button[data-view="list"]');
       assert.strictEqual(await page.$$eval('#list .item', (x) => x.length), 8);
+      await page.click('#tabFix');
+      assert.strictEqual(await page.$$eval('#fxList .item', (x) => x.length), 1);
+      await page.click('#tabBud');
+      assert.strictEqual(await page.textContent('#rateList .item[data-rate="USD"] b'), '1 USD = 400 CUP');
       assert.deepStrictEqual(errors, []);
-      ok('botón ➕ Anotar -> 4 pestañas, sin Gráficos, 8 movimientos');
+      ok('botón 📱 App -> 6 pestañas; Balance por moneda y ≈ total en CUP (parcial) como /balance; gráficos, movimientos, fijos y tasas adentro');
       await ctx.close();
+    }
+
+    // 25c) «↩️ Borrar el último»: el más reciente de la lista, con confirmación -> op del
+    {
+      const { ctx, page, errors } = await newPage(browser, base, APP_Q, true);
+      await page.click('#tabs button[data-view="list"]');
+      assert.ok(await page.isVisible('#lastBtn'));
+      await page.click('#lastBtn');
+      assert.strictEqual(await page.textContent('#title'), 'Borrar el último');
+      assert.ok(await page.isVisible('#delConfirm'));
+      assert.ok(await page.isHidden('#editBtn'));
+      assert.ok((await page.textContent('#detSum')).includes('1.500,50 CUP'));
+      await page.click('#delNo');                                                          // cancelar no envía nada
+      assert.deepStrictEqual((await tg(page)).sent, []);
+      await page.evaluate(() => window.__tg.back.cb());
+      assert.ok(await page.isVisible('#sL'));
+      await page.click('#lastBtn');
+      await page.click('#delYes');
+      assert.deepStrictEqual((await tg(page)).sent, ['{"v":1,"op":"del","id":"701"}']);
+      await ctx.close();
+      // sin movimientos o sin fragmento: no hay botón; Balance pide /app o dice «sin movimientos»
+      let p2 = await newPage(browser, base, fragment({ v: 1, t: 1, d: '2026-10-04', c: [], a: [], m: [], s: [] }), true);
+      await p2.page.click('#tabs button[data-view="list"]');
+      assert.ok(await p2.page.isHidden('#lastBtn'));
+      await p2.page.click('#tabBal');
+      assert.strictEqual((await balState(p2.page)).empty, 'Sin movimientos en octubre 2026.');
+      await p2.ctx.close();
+      p2 = await newPage(browser, base, fragment(fixture(hoy)), true);                   // fragmento viejo (sin "s")
+      await p2.page.click('#tabBal');
+      assert.deepStrictEqual(await balState(p2.page), { empty: 'Manda /app para ver el balance del mes.', cards: [], cup: '', note: '', bud: [] });
+      await p2.ctx.close();
+      p2 = await newPage(browser, base, '?tab=b', true);                                  // ?tab=b abre en Balance
+      assert.ok(await p2.page.isVisible('#sBal'));
+      assert.strictEqual((await balState(p2.page)).empty, 'Manda /app para ver el balance del mes.');
+      // solo CUP: sin bloque «≈ Total en CUP»
+      await p2.ctx.close();
+      p2 = await newPage(browser, base, fragment({ v: 1, t: 1, d: '2026-10-04', c: [], a: [], m: [], s: [[0, 100, 250.5]] }), true);
+      await p2.page.click('#tabBal');
+      assert.deepStrictEqual(await balState(p2.page), { empty: '', cards: ['CUP: Ingresos +100 CUP | Gastos −250,50 CUP | ⚠️ Balance −150,50 CUP'], cup: '', note: '', bud: [] });
+      assert.deepStrictEqual([...errors, ...p2.errors], []);
+      ok('borrar el último -> confirmación y op del del más reciente; balance vacío / sin fragmento / solo CUP');
+      await p2.ctx.close();
     }
 
     // 26) tema oscuro de Telegram (themeParams como variables CSS) + capturas
@@ -795,7 +875,7 @@ async function shot(page, name) { if (SHOTS) await page.screenshot({ path: path.
       await ctx.close();
     }
 
-    // 27) anchos 360 y 420: sin desborde horizontal, torta y barras dentro de la pantalla; en «➕ Anotar» 4 pestañas legibles
+    // 27) anchos 360 y 420: sin desborde horizontal, torta y barras dentro de la pantalla; las 6 pestañas legibles y a la vista
     for (const w of [360, 420]) {
       const ctx = await browser.newContext({ viewport: { width: w, height: 800 }, deviceScaleFactor: 2, timezoneId: TZ, locale: 'es-ES' });
       await ctx.route('https://telegram.org/**', (r) => r.fulfill({ status: 200, contentType: 'application/javascript', body: '' }));
@@ -812,18 +892,33 @@ async function shot(page, name) { if (SHOTS) await page.screenshot({ path: path.
       }));
       assert.deepStrictEqual(m, { overflow: 0, tabsCut: [], pie: true, bars: true, legendCut: false, chipRows: 1 }, 'ancho ' + w);
       await page.screenshot({ path: path.join(OUT, 'fase6-graficos-' + w + '.png'), fullPage: true });
-      await page.goto(base + '/' + AN_URL.slice(AN_URL.indexOf('?')));
+      await page.goto(base + '/?v=10' + APP_Q);
       const t = await page.evaluate(() => ({
         overflow: document.documentElement.scrollWidth - window.innerWidth,
         tabs: document.querySelectorAll('#tabs button').length,
         tabsCut: Array.from(document.querySelectorAll('#tabs .tl')).filter((x) => x.scrollWidth > x.clientWidth + 1).map((x) => x.textContent),
         tabsRows: new Set(Array.from(document.querySelectorAll('#tabs button')).map((b) => Math.round(b.getBoundingClientRect().top))).size,
+        tabsOut: Array.from(document.querySelectorAll('#tabs button')).filter((b) => b.getBoundingClientRect().right > window.innerWidth || b.getBoundingClientRect().left < 0).length,
+        tabsScroll: document.getElementById('tabs').scrollWidth - document.getElementById('tabs').clientWidth,
       }));
-      assert.deepStrictEqual(t, { overflow: 0, tabs: 4, tabsCut: [], tabsRows: 1 }, 'Anotar ancho ' + w);
-      await page.screenshot({ path: path.join(OUT, 'fase6-anotar-' + w + '.png') });
+      assert.deepStrictEqual(t, { overflow: 0, tabs: 6, tabsCut: [], tabsRows: 1, tabsOut: 0, tabsScroll: 0 }, 'App ancho ' + w);
+      const tag = w === 360 ? 'unboton-' : 'unboton-' + w + '-';
+      await page.screenshot({ path: path.join(OUT, tag + 'nuevo.png') });
+      for (const [view, name] of [['balance', 'balance'], ['list', 'movimientos'], ['charts', 'graficos'], ['budgets', 'presupuestos'], ['fixed', 'fijos']]) {
+        await page.click('#tabs button[data-view="' + view + '"]');
+        const o = await page.evaluate(() => ({ overflow: document.documentElement.scrollWidth - window.innerWidth,
+          cut: Array.from(document.querySelectorAll('.bcard .row span, #gLeg .lv2, .item .ia, .item .lv')).filter((x) => x.getBoundingClientRect().right > window.innerWidth + 0.5).length }));
+        assert.deepStrictEqual(o, { overflow: 0, cut: 0 }, view + ' ancho ' + w);
+        if (w === 360 || view === 'balance') await page.screenshot({ path: path.join(OUT, tag + name + '.png'), fullPage: true });
+      }
+      if (w === 360) {
+        await page.click('#tabs button[data-view="list"]');
+        await page.click('#lastBtn');
+        await page.screenshot({ path: path.join(OUT, 'unboton-borrar-ultimo.png') });
+      }
       await ctx.close();
     }
-    ok('gráficos y Anotar a 360 y 420 px -> sin desborde y 4 pestañas legibles');
+    ok('gráficos y App a 360 y 420 px -> sin desborde, 6 pestañas legibles sin scroll, cada pestaña dentro del ancho');
 
     // 28) sin datos: sin fragmento, fragmento sin agregados, y moneda sin datos
     {
